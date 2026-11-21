@@ -4,6 +4,7 @@ import { MODE_AUTH, FrameDecoder, buildEncryptedFrame, cmessEncrypt, nextSession
 import { PacketReader, PacketWriter } from "./packet.ts";
 import { Op } from "./opcodes.ts";
 import { toHex } from "./bytes.ts";
+import { backendOrigin } from "./serviceUrl.ts";
 
 export type TcpTarget = "auth" | "game1" | "game2" | "game3";
 
@@ -37,9 +38,7 @@ export function defaultServerUrl(): string {
   const qs = GW_OVERRIDE && typeof location !== "undefined" ? new URLSearchParams(location.search).get("gw") : null;
   if (qs) return qs;
   if (GW_URL) return GW_URL;
-  const host = typeof location !== "undefined" && location.hostname ? location.hostname : "127.0.0.1";
-  const proto = typeof location !== "undefined" && location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${host}:8090`;
+  return backendOrigin().replace(/^http/, "ws");
 }
 
 /** PROTOCOL_BASE_CONNECT_ACK (2306), identical on Auth and Game. Reader positioned after opcode. */

@@ -432,7 +432,7 @@ export const inventoryExpansionSlots = (itemId: number) => EXPANSION_SLOTS.get(i
 export const canExtendInventory = (p: Account, add: number) => add > 0 && p.inventoryPlus + add <= INVENTORY_MAX_PLUS;
 function notifyInventoryExtended(c: GameClient, p: Account, add: number): void {
   c.session.send(maxUpAck(0, p, add));
-  c.session.send(announce(`Capacidade do inventário ampliada em ${add} espaços.`));
+  c.session.send(announce(`Inventory capacity increased by ${add} slots.`));
   log(`[Inventory] Player ${p.playerId} inventory plus ${p.inventoryPlus - add} -> ${p.inventoryPlus} (+${add})`);
 }
 export async function extendInventory(c: GameClient, p: Account, add: number): Promise<boolean> {
@@ -526,7 +526,7 @@ export async function handleInventoryUpgrade(c: GameClient): Promise<void> {
   if (await dao.update1("accounts", "inventory_plus", p.inventoryPlus + 100, "player_id", p.playerId)) {
     p.inventoryPlus += 100;
     c.session.send(maxUpAck(0, p, 100));
-    c.session.send(announce("Capacidade do inventário ampliada em 100 espaços."));
+    c.session.send(announce("Inventory capacity increased by 100 slots."));
   } else {
     await dao.addMoney(p, 0, 10000);
     c.session.send(maxUpAck(-1 >>> 0));

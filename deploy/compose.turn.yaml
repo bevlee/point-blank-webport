@@ -1,0 +1,10 @@
+# Linux only: TURN must receive its advertised UDP relay ports without an HTTP proxy.
+services:
+  turn:
+    image: coturn/coturn:4.6.3@sha256:71c3c990283385567f11794ee692e3a47b66fd9b0bb39e42afbe776e331dd888
+    network_mode: host
+    restart: unless-stopped
+    command: [-c, /etc/coturn/turnserver.conf, --log-file=stdout]
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./turn-tls:/etc/turn-tls:ro

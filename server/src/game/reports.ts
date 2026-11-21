@@ -134,7 +134,7 @@ async function maybeAutoMute(target: Account): Promise<void> {
   const r = await pool.query(`SELECT count(DISTINCT sender_id) AS n FROM base_report_history WHERE owner_id=$1 AND (type & $2) = $2 AND date >= $3`, [String(target.playerId), REPORT_TYPE.chat, since24h()]);
   if (Number(r.rows[0].n) < AUTO_MUTE_REPORTERS || (await isMuted(target.playerId))) return;
   await applyMute(target.playerId, AUTO_MUTE_MINUTES, `Auto: ${AUTO_MUTE_REPORTERS} chat reports in 24 h`);
-  serverReply(target, `Você foi silenciado por ${AUTO_MUTE_MINUTES} minutos após denúncias de chat de vários jogadores.`);
+  serverReply(target, `You were muted for ${AUTO_MUTE_MINUTES} minutes following chat reports from multiple players.`);
   for (const g of social.online.values()) if (g.isGM()) serverReply(g, `[DENUNCIA] ${target.nickname} silenciado ${AUTO_MUTE_MINUTES} min (${AUTO_MUTE_REPORTERS} denunciantes de chat em 24 h).`);
   log(`auto mute ${AUTO_MUTE_MINUTES} min: ${target.nickname}`);
 }

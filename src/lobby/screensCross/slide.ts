@@ -127,6 +127,16 @@ export class CrossStage {
 
   constructor(private sound: (s: CrossSound) => void) {}
 
+  snap(target: CrossTarget): void {
+    this.cur = target.phase; this.next = null; this.state = 4; this.step = target.step;
+    this.enabled.clear();
+    for (const [key, slide] of Object.entries(this.slides)) {
+      const shown = key === (target.step ?? target.phase);
+      slide.state = shown ? 0 : 1; slide.t = 1; slide.x = 0; slide.y = 0;
+    }
+    this.enabled.add(target.step ?? target.phase);
+  }
+
   /** the page the controller is on: queue a phase change, run ChangeStep for a step change */
   want(t: CrossTarget): void {
     const phaseMoves = t.phase !== (this.next ?? this.cur);

@@ -47,7 +47,7 @@ async function account(username: string, password: string): Promise<{ token: Uin
 interface Player { name: string; game: GameClient; room: RoomClient; playerId: bigint; net?: PbBattleNet }
 
 async function enter(name: string, username: string): Promise<Player> {
-  const acc = await account(username, "battle-test-pw1");
+  const acc = await account(username, process.env.PB_LIVE_TEST_PASSWORD ?? "battle-test-pw1");
   const auth = new AuthClient(GW);
   const mac = crypto.getRandomValues(new Uint8Array(6));
   mac[0] = (mac[0] & 0xfe) | 2;
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     p.net = new PbBattleNet({
       session: { uniqueRoomId: ep.uniqueRoomId, roomSeed: ep.roomSeed, slot: ep.slot, accountId: Number(p.playerId & 0xffn), signalTicket: ep.signalTicket },
       roster, serverUrl: GW, room: p.room,
-      p2p: { RTCPeerConnection: RTCPeerConnection as unknown as typeof globalThis.RTCPeerConnection, worker: nodeWorker, data: DATA, log: (l) => log(p.name, `p2p: ${l}`) },
+      p2p: { relayOnly: process.env.PB_TEST_RELAY_ONLY === "1", RTCPeerConnection: RTCPeerConnection as unknown as typeof globalThis.RTCPeerConnection, worker: nodeWorker, data: DATA, log: (l) => log(p.name, `p2p: ${l}`) },
     });
   }
   let bClosed = "";
@@ -166,7 +166,8 @@ async function main(): Promise<void> {
   check("kill: B's mark via the host -> A's DEATH_REQ -> Server.Game DEATH_ACK", !k.startsWith("ERR") && !d.startsWith("ERR"), `${k}; B: ${d}`);
 
   // respawn: B alive again -> RESPAWN_REQ -> 5138 -> the host bridge re-syncs B (type 2, respawn 2)
-  const respawnB = waitFor<number>("B RESPAWN_ACK", 5000, (done) => { B.room.onRespawn = (slot, n) => { if (slot === epB.slot) done(n); }; });
+  const respawnB = waitFor<number>("B RESPAWN_ACK", 8000, (done) => { B.room.onRespawn = (slot, n) => { if (slot === epB.slot) done(n); }; });
+  await sleep(350); // allow the victim death-mark hold to expire, as the real respawn timer does
   B.net!.sendState({ ...state(B.net!.localId, 1, i, -5) });
   await sleep(50);
   B.net!.sendState({ ...state(B.net!.localId, 1, i + 1, -5), t: Date.now() + 100 });
@@ -176,15 +177,20 @@ async function main(): Promise<void> {
   const pb = st1.players.find((p) => p.slot === epB.slot);
   check("respawn: RESPAWN_ACK -> host RespawnSync (B alive, respawn count = Server.Game's)", n > 1 && !!pb && !pb.dead && pb.respawn === (n & 0xff), `server spawns ${n}, host ${JSON.stringify(pb)}`);
 
-  // end: the leader's clock -> TIMERSYNC 0 -> ENDBATTLE (exp / gold on Server.Game) -> the host closes the guests
-  const endA = waitFor<string>("A ENDBATTLE", 6000, (done) => { A.room.onEndBattle = (e) => done(`winner ${e.winner} FR ${e.frKills} CT ${e.ctKills}`); });
-  const endB = waitFor<string>("B ENDBATTLE", 6000, (done) => { B.room.onEndBattle = (e) => done(`winner ${e.winner}`); });
+  // The production battle guard must refuse an early clock end. Do not enable PB_DEV_OPS to make a smoke pass.
+  let earlyEnd = false;
+  A.room.onEndBattle = () => { earlyEnd = true; };
+  B.room.onEndBattle = () => { earlyEnd = true; };
   A.room.timerSync(0);
-  const ea = await endA.catch((e) => `ERR ${(e as Error).message}`);
-  const eb = await endB.catch((e) => `ERR ${(e as Error).message}`);
-  check("end: TIMERSYNC 0 -> ENDBATTLE from Server.Game on both", !ea.startsWith("ERR") && !eb.startsWith("ERR"), `A: ${ea}; B: ${eb}`);
-  await waitFor<void>("B link closed", 3000, (done) => { const t = setInterval(() => { if (bClosed) { clearInterval(t); done(); } }, 20); }).catch(() => {});
-  check("end: the host closed B's WebRTC link (1001 match over)", /1001/.test(bClosed), bClosed || "still open");
+  await sleep(300);
+  check("early TIMERSYNC 0 cannot end a running production match", !earlyEnd);
+  // In a 1v1 the quitter gets GIVEUP_ACK and the remaining player gets the match result.
+  const endA = waitFor<number>("A ENDBATTLE after opponent Exit", 5000, (done) => { A.room.onEndBattle = (event) => done(event.winner); });
+  const exited = B.game.conn.waitFor(5134, 5000);
+  B.room.giveUp();
+  const ack = await exited;
+  check("B: Exit acknowledged by Server.Game", ack.readD() === epB.slot);
+  check("A: opponent Exit ends the 1v1 with a result", await endA === 0);
 
   for (const p of [A, B]) {
     p.net?.dispose();

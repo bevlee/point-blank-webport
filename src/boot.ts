@@ -15,6 +15,7 @@ import type { PbBattleNet } from "./net/battle.ts";
 import type { RoomClient } from "./net/roomClient.ts";
 import type { GameHandle } from "./main.ts";
 import type { PlayerStore } from "./lobby/screens/index.ts";
+import { playerLoadouts } from "./lobby/equipment/LoadoutStore.ts";
 import { EquipSlot } from "./lobby/types.ts";
 import { setBattlePrep } from "./game/battlePrep.ts";
 import { missionPanelOn } from "./game/pbHud/missionHud.ts";
@@ -115,6 +116,7 @@ function playLocal(screen?: LobbyScreenLike, map?: MapId, allWeapons?: boolean, 
     .then(([{ startGame }, { inventoryFromPlayer }, { itemEffectsOf, allItemEffects }, all]) => startGame({
       map,
       respawnInventory: all ? all.inventory : player ? inventoryFromPlayer(player) : undefined,
+      savedLoadouts: player ? playerLoadouts(player)?.data : undefined,
       localChara: player?.teamCharas().red || undefined, // no room/side offline: red-side chara
       localRank: player?.state.profile?.rank,
       itemEffects: allItems ? allItemEffects() : player ? itemEffectsOf(player.items(), player.equipPairs()[EquipSlot.Beret]?.itemId) : undefined,
@@ -200,6 +202,7 @@ function playBattle(screen: LobbyScreenLike, net: PbBattleNet, room: RoomClient)
     .then(([{ startGame }, { inventoryFromPlayer }, { itemEffectsOf }]) => startGame({
       net,
       respawnInventory: player ? inventoryFromPlayer(player) : undefined,
+      savedLoadouts: player ? playerLoadouts(player)?.data : undefined,
       // ?: the side's equipped character (same pick as the RESPAWN pair 8, respawnEquipFor) + Quick Change items
       localChara: player ? (slot % 2 === 0 ? player.teamCharas().red : player.teamCharas().blue) || undefined : undefined,
       itemEffects: player ? itemEffectsOf(player.items(), player.equipPairs()[EquipSlot.Beret]?.itemId) : undefined,

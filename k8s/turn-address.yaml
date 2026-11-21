@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pb-turn-address
+  namespace: pb
+data:
+  TURN_PUBLIC_IP: '149.118.76.148'

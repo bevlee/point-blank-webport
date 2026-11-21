@@ -271,7 +271,7 @@ function toViewmodelPass(o: THREE.Object3D): void {
     m.receiveShadow = false;
     const conv = (mm: THREE.Material) => {
       if (mm.userData.vm) return mm;
-      const c = pbCharaMaterial(mm, PB_VIEWER_MTL);
+      const c = mm.userData.pbPhysicalFinish ? mm : pbCharaMaterial(mm, PB_VIEWER_MTL);
       c.transparent = true; // transparent queue renders after all world geometry (incl. world transparents)
       c.userData.vm = true;
       return c;
@@ -674,6 +674,8 @@ export class Viewmodel {
 
   // animation state
   private t = 0;
+  private inspectT = -1;
+  private inspectPivot = new THREE.Vector3(0.22, -0.20, -0.50);
   private bobPhase = 0;
   private sway = new THREE.Vector2();
   private lastYaw = 0;
@@ -1017,8 +1019,20 @@ export class Viewmodel {
     }
   }
 
+  /** I: opt-in mastery material inspection, driven by ordinary player input. */
+  inspect(): void {
+    if (typeof location !== "undefined" && (new URLSearchParams(location.search).get("m4finish")?.startsWith("bo3-") || new URLSearchParams(location.search).get("m4finish") === "physical") && this.lastDef?.name.toLowerCase().includes("m4a1")) this.inspectT = 0;
+  }
+
   update(dt: number, camera: THREE.Camera, speed: number, grounded: boolean, aiming: boolean): void {
     this.t += dt;
+    if (this.reloadT >= 0 || this.switchT < 0.99 || aiming) this.inspectT = -1;
+    if (this.inspectT >= 0 && (this.inspectT += dt) > 5) this.inspectT = -1;
+    const inspect = this.inspectT < 0 ? 0 : Math.sin(Math.PI * this.inspectT / 5);
+    this.group.rotation.set(0.10 * inspect, -0.80 * inspect, 0.25 * inspect);
+    this.group.position.copy(this.inspectPivot).applyEuler(this.group.rotation).multiplyScalar(-1).add(this.inspectPivot);
+    this.group.position.x -= inspect * 0.16;
+    this.group.position.z -= inspect * 0.08;
     if (this.rigActive && this.rig) this.updateJump(dt, grounded);
     for (let i = 0; i < 2; i++) {
       if (this.bladeBack[i] > 0 && (this.bladeBack[i] -= dt) <= 0) { const w = i ? this.rigWeaponL : this.rigWeapon; if (w) w.visible = true; }

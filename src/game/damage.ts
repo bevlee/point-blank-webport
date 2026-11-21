@@ -1,32 +1,11 @@
-import { PB_CHARA, PB_DEFAULT_HELMET_PROTECTION } from "../gameplay/pbConfig";
-import { actorHelmetDefense } from "./actorEquip";
-import type { Actor, HitZone } from "./types";
+import { PB_CHARA, PB_DEFAULT_HELMET_PROTECTION } from "../gameplay/pbConfig.ts";
+import { actorHelmetDefense } from "./actorEquip.ts";
+import type { Actor, HitZone } from "./types.ts";
 
-// PB damage model from the 2017 exe:
-//   CGameCharaBase::CalcDamage 0x5448d0, _CalcDistanceRate 0x540690, CalcHelmetPenetrate 0x5425e0.
-// Part rates are pef-2017 Character.SWAT_Male.DamageRate (Body 1.2, Arm/Leg 0.8, Hand/Foot 0.6), read raw by
-// CCharaInfo::ReadDamageRateInfo 0x534a20 and applied as plain multipliers by 0x542df0 (rate = getter 0x542f30 x
-// GetDamageRateByMode 1.0) to info.f40 on a HUMAN target, EXCEPT hit parts 9, 10 and 0x22 (the head, part table
-// 0x54310c): there 0x542df0 does not multiply. For those parts the local shooter's _CalcHitChara (0x60cd89..0x60ce08)
-// replaces f40 with CalcHeadShotDamage 0x7fbf20 = 200 + shuffled[a % 35] - shuffled[(seed + idx) % 35], capped at 255
-// (a 35-byte shuffled part table, CHARA_HIT_MAXCOUNT), not weapon Damage x Head. So the pef "Head 35" is only used for AI
-// targets (0x542e77, every part), never as a human headshot multiplier. The 3.123 pef (Head 5, Body 1, Arm/Leg 0.75,
-// Hand/Foot 0.5, HP 110) is NOT used: 2017 is the gameplay reference.
+// Current balance: head 1.5x, torso 1x, limbs 0.8x.
 const R = PB_CHARA.damageRate;
-
-/**
- * f40 of a human head hit (CalcHeadShotDamage 0x7fbf20): 200 + a - b with a, b bytes of the shuffled 35-part table, i.e.
- * 166..234 if the table is a permutation of 0..34 (not verified), so 200 is its mean. [INFERIDO] Always above a
- * soldier's HP (100 / 110 / 120): a head hit that gets through the helmet kills (distance rate still applies, 0x543bbc).
- */
-export const HEAD_HIT_DAMAGE = 200;
-
-/** game/types HitZone: torso = Body, limb = Arm/Leg (Hand / Foot 0.6 are not separate zones here). */
-export const ZoneMultiplier: Record<HitZone, number> = {
-  head: R.head, // AI targets only (0x542e77); a human head hit uses HEAD_HIT_DAMAGE
-  torso: R.body,
-  limb: R.arm,
-};
+export const HEADSHOT_MULTIPLIER = 1.5;
+export const ZoneMultiplier: Record<HitZone, number> = { head: HEADSHOT_MULTIPLIER, torso: 1, limb: 0.8 };
 
 /**
  * PB soldiers have no armor points. CalcDamage's percent term info.f10 is the thickness of the wall a bullet went through
@@ -153,15 +132,13 @@ export function pbHitDamage(opts: {
   /** 0.01 x the shooter's DPD_Rate title sum (distanceRate equipBonus) */
   dpdBonus?: number;
 }): PbHit {
-  const rates = { ...R, ...opts.partRates };
   const z = opts.zone;
-  const part = z === "torso" || z === "body" ? rates.body : z === "limb" ? rates.arm
-    : z === "arm" ? rates.arm : z === "leg" ? rates.leg : z === "hand" ? rates.hand : rates.foot;
   if (z === "head" && opts.helmet && !helmetPenetrates(opts.helmetPenetrate01 ?? 0, opts.helmetDefense, opts.rand)) {
     return { damage: HELMET_BLOCKED_DAMAGE, helmetBlocked: true };
   }
   const dr = opts.dpdRate !== undefined && opts.range ? distanceRate(opts.distance ?? 0, opts.range, opts.dpdRate, opts.dpdBonus ?? 0) : 1;
-  const scaled = z === "head" ? HEAD_HIT_DAMAGE : opts.base * part;
+  const zone = z === "head" ? "head" : z === "torso" || z === "body" ? "torso" : "limb";
+  const scaled = opts.base * ZoneMultiplier[zone];
   return { damage: pbCalcDamage(scaled, dr, z === "head" ? 0 : opts.wallThickness ?? 0), helmetBlocked: false };
 }
 
@@ -183,10 +160,8 @@ export function computeDamage(req: DamageRequest): DamageResult {
       helmetPenetrate01: Math.max(0, Math.min(100, req.helmetPenetrate)) / 100, helmetDefense: actorHelmetDefense(t.id) || undefined,
     });
     if (req.zone === "head" && t.helmet) { t.helmet = false; helmetBlocked = true; }
-    dmg = hit.helmetBlocked ? hit.damage : pbCalcDamage(req.zone === "head" ? HEAD_HIT_DAMAGE : req.base * ZoneMultiplier[req.zone], req.falloff ?? 1);
+    dmg = hit.helmetBlocked ? hit.damage : pbCalcDamage(req.base * ZoneMultiplier[req.zone], req.falloff ?? 1);
   }
-  // Defense Up coupons of the target (Actor.defense, local player only) [INFERIDO: damage x (1 - N%), at least 1]
-  if (dmg > 0 && t.defense) dmg = Math.max(1, Math.round(dmg * (1 - t.defense)));
   // the room rule replaces the damage, but a helmet that stopped the hit still stops it
   if (!helmetBlocked) dmg = ruleDamage(req.room, dmg, req.zone === "head");
   if (dmg <= 0) return { dealt: 0, killed: false, headshot: req.zone === "head", blocked: false, helmetBlocked };

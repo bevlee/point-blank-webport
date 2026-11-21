@@ -4,14 +4,14 @@ import type { PbWeaponBlock } from "./types";
 
 export const FAMILY_PB: Record<string, PbWeaponBlock> = {
  "AR": {
-  "src": "pef-cross:ScopeGun/AK-SOPMOD",
+  "src": "pef-cross:Assault/AK-SOPMOD",
   "damage": 33,
   "damageMax": 36,
   "fireDelay": 0.085,
   "range": 160,
   "dpdRate": 0.25,
-  "helmetPenetrate": 0.85,
-  "helmetPenetrateStr": 0.85,
+  "helmetPenetrate": 0.76,
+  "helmetPenetrateStr": 0.76,
   "bulletWeight": 5,
   "loadBullet": 30,
   "maxBullet": 150,
@@ -30,7 +30,6 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   "needToLoadBullet": 0,
   "fovOnZoom": 30,
   "fovOnScope": 28,
-  "fovOnScope2": 0,
   "maxScopeLevel": 1,
   "deviation": 1.25,
   "deviationMax": 40,
@@ -73,7 +72,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "SMG": {
-  "src": "pef-cross:Gun/AKS74U_Zoom",
+  "src": "pef-cross:SMG/AKS74U_Zoom",
   "damage": 26,
   "fireDelay": 0.085,
   "range": 60,
@@ -140,7 +139,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "MG": {
-  "src": "pef-cross:Gun/MK46_Ext_EV",
+  "src": "pef-cross:MG/MK46_Ext_EV",
   "damage": 25,
   "fireDelay": 0.08,
   "range": 120,
@@ -206,7 +205,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "SR": {
-  "src": "pef-cross:ScopeGun/SSG69",
+  "src": "pef-cross:Sniper/SSG69",
   "damage": 76,
   "fireDelay": 0.3,
   "range": 180,
@@ -259,8 +258,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
    "max": 48,
    "expand": 0,
    "speedFactor": 0.4,
-   "type": 2,
-   "invisible": 3
+   "type": 2
   },
   "moveNormal": {
    "stand": 76,
@@ -273,7 +271,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "SG": {
-  "src": "pef-cross:Gun/870MCS",
+  "src": "pef-cross:Shotgun/870MCS",
   "damage": 23,
   "fireDelay": 1,
   "range": 65,
@@ -297,7 +295,6 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   "needToLoadBullet": 1,
   "loadBulletTime": 1,
   "pumpAction": 1,
-  "fovOnZoom": 20,
   "deviation": 8,
   "deviationMax": 20,
   "recoil": {
@@ -333,7 +330,7 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "HG": {
-  "src": "pef-cross:Gun/Colt45",
+  "src": "pef-cross:Pistol/Colt45",
   "damage": 25,
   "fireDelay": 0.2,
   "range": 55,
@@ -354,8 +351,6 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   "reloadTime": 2.4,
   "reloadBulletCount": 7,
   "needToLoadBullet": 0,
-  "fovOnZoom": 20,
-  "maxScopeLevel": 0,
   "deviation": 2.1,
   "deviationMax": 8.2,
   "recoil": {
@@ -416,10 +411,11 @@ export const FAMILY_PB: Record<string, PbWeaponBlock> = {
   }
  },
  "GRENADE": {
-  "src": "pef-cross:Grenade/K-400",
+  "src": "pef-cross:Throwing/K-400",
   "damage": 90,
   "fireDelay": 1,
   "range": 30,
+  "dpdRate": 0.9,
   "helmetPenetrate": 0.94,
   "helmetPenetrateStr": 0.94,
   "loadBullet": 1,

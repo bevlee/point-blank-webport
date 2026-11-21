@@ -42,7 +42,6 @@ import {
   CHAT_COLOR, CHAT_TABS, type ChatRow, type ChatTab, type Chrome, type MapChoice, type Page,
 } from "./model.ts";
 import { T } from "./strings.ts";
-import { loadCharaHp } from "../../gameplay/charaHp.ts";
 import { TitleClient } from "../../net/titleClient.ts";
 import { TREE_NODES } from "./titleData.ts";
 import { TS, emptyTitleState, equipBlock, titleSlotOf, getBlock, hasTitle, titleDef } from "./titleLogic.ts";
@@ -70,6 +69,7 @@ export interface Lobby2017Deps {
   onLocalPlay(map: MapId, bots: { botCount: number; botSkill: number }): void;
   /** Opções button: the shell opens the classic Option window (game/classicOptionWindow.ts) */
   onOptions?(): void;
+  onSelectLoadout?(): Promise<boolean>;
   persistCatalog?: boolean;
 }
 
@@ -148,11 +148,11 @@ type CreateState = {
 /** RoomWeaponsFlag of the window: the mode's preset (special-weapon / AI modes), else the weapon checkboxes */
 /** ROOM_JOIN_ACK error -> text [RECRIADO]: the original strings for these codes were not traced (server handleJoinRoom). */
 const JOIN_FAIL: Record<number, string> = {
-  0x80001003: "A sala está lotada.",
-  0x80001004: "A sala não existe mais.",
-  0x80001005: "Senha incorreta.",
-  0x8000100c: "Você foi expulso desta sala.",
-  0x80001013: "Não é possível entrar: a partida já começou e o líder bloqueou a entrada no meio da partida.",
+  0x80001003: "The room is full.",
+  0x80001004: "The room no longer exists.",
+  0x80001005: "Incorrect password.",
+  0x8000100c: "You were kicked from this room.",
+  0x80001013: "Cannot join: the match has started and the host has disabled mid-match entry.",
 };
 /** Users limit of the picked map (Matches.xml Limit; Bomb Mission has its own list); AI rooms are fixed server-side */
 const playerLimit = (cr: CreateState): number => mapPlayerLimit(cr.map?.mapId ?? 0, !!ROOM_MODES[cr.mode].rounds);
@@ -198,7 +198,11 @@ const RECONNECT_IDLE_MS = 10 * 60000;
 type BuyState = { currency: "gold" | "cash"; option: number; busy: boolean };
 type Msg = { text: string; onOk?: () => void; onCancel?: () => void };
 
+import { LoadoutStore } from "../equipment/LoadoutStore.ts";
+
 export class Lobby2017 {
+  loadouts: LoadoutStore | null = null;
+  selectingLoadout = false;
   page: Page = "channels";
   auth: AuthClient | null = null;
   game: GameClient | null = null;
@@ -334,7 +338,7 @@ export class Lobby2017 {
   private async loginAuth(): Promise<void> {
     const auth = (this.auth = new AuthClient(this.deps.serverUrl));
     const res = await auth.connectAndLogin({ token: this.deps.token, mac: this.deps.mac, width: 1024, height: 768 });
-    if (!res.ok) throw new Error(`Login recusado: ${res.errorName}`);
+    if (!res.ok) throw new Error(`Login rejected: ${res.errorName}`);
     this.login = res;
     try { this.authMeta = await auth.fetchMeta(); } catch (e) { this.authMeta = null; console.warn("[lobby2017] Auth meta failed", e); }
     this.peekCache = undefined; // a reconnect brings a fresh 2316..2453
@@ -461,6 +465,9 @@ export class Lobby2017 {
     const session = (this.session = createMetaSession({ authMeta: this.authMeta, enterPushes: game.enterPushes, gameConn: game.conn, persistCatalog: this.deps.persistCatalog }));
     this.offs.push(session.player.subscribe("*", () => this.draw()), session.shop.subscribe("*", () => this.draw()),
       session.lobby.subscribe("*", () => { this.loadingRooms = false; if (this.page === "lobby") this.draw(); }));
+    const loadouts = this.loadouts = new LoadoutStore(session.player, this.deps.token);
+    this.offs.push(loadouts.subscribe('change', () => this.draw()));
+    void loadouts.load();
     this.channelId = channelId;
     this.busy = false;
     this.loading = null;
@@ -488,19 +495,19 @@ export class Lobby2017 {
     if (this.kickedByServer) {
       this.teardown();
       // [RECRIADO] texts (no original string for the kicked side; the new login sees STBL_IDX_EP_LOGIN_ALREADY_LOGIN_Q); OK goes back to the login
-      this.fail(new Error(this.kickDuplicate ? "Sua conta foi conectada em outro lugar." : "Você foi desconectado do servidor por um GM."), () => this.deps.onExit());
+      this.fail(new Error(this.kickDuplicate ? "Your account was logged in elsewhere." : "You were disconnected by a GM."), () => this.deps.onExit());
       return;
     }
     const to = this.session && this.server ? { server: this.server.index, channel: this.channelId, page: this.page } : null;
     this.teardown();
     // the server dropped the session for inactivity (TcpSession.closeIdle, WS close 4000): never reconnect, even with
     // recent page input (mouse moves send no packet); OK goes back to the login, which asks for the account again
-    if (why === "idle") { this.fail(new Error("Desconectado por inatividade."), () => this.deps.onExit()); return; } // [RECRIADO] text
+    if (why === "idle") { this.fail(new Error("Disconnected due to inactivity."), () => this.deps.onExit()); return; } // [RECRIADO] text
     if (Date.now() - this.lastInput < RECONNECT_IDLE_MS) { void this.reconnect(to); return; }
     // idle tab (the server's PB_IDLE_KICK_MIN, or nobody there): a timeout, not a hiccup: no reconnect, OK goes back to the login.
     // "upstream closed" = the server closed the session: an idle timeout there, or the server restarting
-    const hint = /upstream closed/i.test(why) ? "\nTempo de conexão esgotado ou servidor reiniciado." : "";
-    this.fail(new Error(`Conexão com o servidor de jogo fechada: ${why}${hint}`), () => this.deps.onExit());
+    const hint = /upstream closed/i.test(why) ? "\nConnection timed out or the server restarted." : "";
+    this.fail(new Error(`Game server connection closed: ${why}${hint}`), () => this.deps.onExit());
   }
 
   /**
@@ -589,7 +596,7 @@ export class Lobby2017 {
       const cr = this.create;
       const md = ROOM_MODES[cr?.mode ?? 0];
       const rs = kind === "create"
-        ? await RoomScreen.create(game, this.roomHost(), cr?.name.trim() || `sala de ${this.nick()}`, {
+        ? await RoomScreen.create(game, this.roomHost(), cr?.name.trim() || `room of ${this.nick()}`, {
           mapId: cr!.map!.mapId, mapName: cr!.map!.name, rule: md.rule, stage: md.stage, roomType: md.roomType, weaponsFlag: weaponsFlagFor(cr!),
           killTime: cr!.killTime, ai: md.ai ? { count: cr!.botCount, level: cr!.aiLevel, allies: cr!.botAllies } : undefined,
           password: cr!.passwordOn ? cr!.password : "", limit: cr!.limitEnter ? 1 : 0, watchRule: cr!.watch, slots: md.ai ? undefined : peopleOf(cr!),
@@ -631,7 +638,7 @@ export class Lobby2017 {
       rs = RoomScreen.adopt(game, this.roomHost(), ack);
     } catch (e) {
       console.warn("[lobby] clan battle room", e);
-      this.say("Não conseguiu entrar na sala da partida do clã.", true);
+      this.say("Could not join the clan match room.", true);
       return;
     }
     respawnWithLoadout(rs.room, session.player);
@@ -687,7 +694,7 @@ export class Lobby2017 {
       this.battleLoadingGuard = setTimeout(() => {
         this.battleLoadingGuard = null;
         hideBattleLoading();
-        this.say("A partida não iniciou (tempo esgotado).", true);
+        this.say("The match did not start (timed out).", true);
         this.draw();
       }, 60000);
     } else if (!keep) hideBattleLoading();
@@ -744,7 +751,7 @@ export class Lobby2017 {
     const maps = stageChoices();
     const modeList = ROOM_MODES.map((_, i) => i);
     this.create = {
-      name: `sala de ${this.nick()}`, map: maps[0] ?? null, maps, pick: 0, top: 0, busy: false, dd: null,
+      name: `room of ${this.nick()}`, map: maps[0] ?? null, maps, pick: 0, top: 0, busy: false, dd: null,
       mode: 0, modeList, killTime: DEFAULT_KILLTIME, edit: false, botCount: AI_COUNT_MAX, aiLevel: 1, botAllies: 0, balance: 0,
       password: "", passwordOn: false, limitEnter: false, people: DEFAULT_PEOPLE, weapons: { ...ALL_WEAPONS }, watch: DEFAULT_WATCH,
       randomMap: false, randomIds: [], rm: null,
@@ -1086,15 +1093,37 @@ export class Lobby2017 {
 
   // ------------------------------------------------------------------------------------------ room
 
+  async selectLoadout(index: number): Promise<void> {
+    const store = this.loadouts, session = this.session;
+    if (!store || !session) throw new Error('Loadouts are not available yet.');
+    if (this.selectingLoadout) return;
+    this.selectingLoadout = true; this.draw();
+    try { await store.save({ ...store.data, active: index }); await store.apply(session); }
+    finally { this.selectingLoadout = false; this.draw(); }
+  }
+
+  private async prepareRoomAction(start: boolean): Promise<void> {
+    const room = this.roomScreen?.room;
+    if (!room || this.busy) return;
+    this.busy = true; this.draw();
+    try {
+      if (this.loadouts && this.loadouts.status !== 'ready') throw new Error('Your loadouts have not loaded. Open Loadouts and retry.');
+      if (this.deps.onSelectLoadout && !await this.deps.onSelectLoadout()) return;
+      if (this.session && this.loadouts) await this.loadouts.apply(this.session);
+      if (start) await this.startBattle(room); else room.ready(chat.isGM && (this.gmObserve || room.mySlot >= 16) ? 2 : 0);
+    } catch (e) { this.say(e instanceof Error ? e.message : String(e), true); }
+    finally { this.busy = false; this.draw(); }
+  }
+
   private onRoom(p: string, c: string): void {
     const r = this.roomScreen?.room;
     if (!r || this.busy) return;
     if (p === "mapinfo" && c === "i3UIButtonRoomSet") return this.openRoomSettings();
     if (p === "mapinfo" && (c === "i3UITab_MapInfo" || c === "i3UITab_MissionCard")) { this.roomTab = c === "i3UITab_MapInfo" ? "map" : "chara"; this.draw(); return; }
     if (p !== "team") return;
-    if (c === "btnReady") r.ready(chat.isGM && (this.gmObserve || r.mySlot >= 16) ? 2 : 0);
+    if (c === "btnReady") { if (r.slots[r.mySlot]?.state === WIRE_READY) r.ready(); else void this.prepareRoomAction(false); }
     else if (c === "btnStart" && this.roomScreen?.countdown.running) r.ready(); // the leader's READYBATTLE in the countdown stops it (255)
-    else if (c === "btnStart") void this.startBattle(r);
+    else if (c === "btnStart") void this.prepareRoomAction(true);
     else if (c === "i3UIButton" || c === "i3UIButton_BlueTeam") {
       const t = c === "i3UIButton" ? 0 : 1;
       if (r.mySlot % 2 !== t && !r.changeTeam(t)) this.say(r.slots[r.mySlot]?.state === WIRE_READY ? T.noChangeSlot : T.full, true);
@@ -1130,7 +1159,6 @@ export class Lobby2017 {
     this.menu = defaultMenuUi();
     this.buy = null;
     this.page = mode;
-    void loadCharaHp().then(() => this.draw());
     void loadCharaStats(`${UI_BASE.replace(/\/ui$/, "")}/config`).then(() => this.draw());
     s.notifyScreen(mode, true);
     if (mode === "shop" && (s.shop.status === "idle" || s.shop.status === "error")) void s.loadShop().catch((e) => this.say(e instanceof Error ? e.message : String(e), true));
@@ -1150,8 +1178,11 @@ export class Lobby2017 {
   }
 
   private openProfile(): void {
-    if (!this.session || !this.titles || this.busy || (this.page !== "lobby" && this.page !== "room")) return;
-    this.menuFrom = this.page === "room" ? "room" : "lobby";
+    if (!this.session || !this.titles || this.busy || (this.page !== "lobby" && this.page !== "room" && this.page !== "inventory" && this.page !== "shop")) return;
+    if (this.page === "inventory" || this.page === "shop") {
+      this.session.notifyScreen(this.page, false);
+      this.buy = null;
+    } else this.menuFrom = this.page === "room" ? "room" : "lobby";
     this.stopPolling();
     this.profile = { selected: 0, slotSel: -1, busy: false };
     this.profileTab = "designation";
@@ -1388,7 +1419,7 @@ export class Lobby2017 {
    *); OK joins the room with the password the push carries */
   private onRoomInvite(inv: ClanRoomInvite): void {
     const name = this.session?.lobby.roomList().find((r) => r.roomId === inv.roomId)?.name ?? String(inv.roomId);
-    const text = tOr("STR_TBL_GUI_LOBBY_INVITE_MESSAGE1","%2% da sala %1% te convidou.\nDeseja aceitar?").replace("%2%", inv.nick).replace("%1%", name);
+    const text = tOr("STR_TBL_GUI_LOBBY_INVITE_MESSAGE1","%2% has invited you to Room %1%.").replace("%2%", inv.nick).replace("%1%", name);
     this.msg = { text, onOk: () => void this.openRoom("join", inv.roomId, inv.password) };
     this.draw();
   }
@@ -1569,7 +1600,8 @@ export class Lobby2017 {
       const text = `${S.buySuccess}\n${itemName(offer.itemId).name}`;
       if (bought) {
         this.log.push(text.replace("\n", " "));
-        this.msg = { text: `${text}\nDeseja usar este item agora?`, onOk: () => void this.useBought(bought), onCancel: () => {} };
+        this.msg = { text: `${text}
+Would you like to use this item now?`, onOk: () => void this.useBought(bought), onCancel: () => {} };
         this.draw();
       } else this.say(`${S.buySuccess} ${itemName(offer.itemId).name}`, true);
     } catch (e) {

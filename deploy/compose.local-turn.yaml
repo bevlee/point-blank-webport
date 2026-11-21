@@ -1,0 +1,29 @@
+# Local Mac/Colima preview only. Both browsers must be on this computer.
+# TCP to TURN avoids Colima's UDP port-forwarding limitations; relay allocations stay inside coturn.
+services:
+  backend:
+    environment:
+      TURN_URLS: turn:127.0.0.1:34780?transport=tcp
+    depends_on:
+      turn-local:
+        condition: service_started
+  turn-local:
+    image: coturn/coturn:4.6.3@sha256:71c3c990283385567f11794ee692e3a47b66fd9b0bb39e42afbe776e331dd888
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:34780:3478/tcp'
+    command:
+      - -n
+      - --listening-ip=0.0.0.0
+      - --relay-ip=127.0.0.1
+      - --external-ip=127.0.0.1
+      - --realm=pb-loopback
+      - --user=${TURN_USERNAME:?Set a local TURN username}:${TURN_CREDENTIAL:?Set a local TURN password}
+      - --lt-cred-mech
+      - --fingerprint
+      - --no-tls
+      - --no-dtls
+      - --no-udp
+      - --allow-loopback-peers
+      - --no-cli
+      - --log-file=stdout

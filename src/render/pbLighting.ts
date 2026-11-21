@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { applyMasteryFinish, masteryFinish } from "./masteryFinish";
 import { getSettings, onSettings } from "../gameplay/settings";
 import { loadCubeDds, loadDetailTexture } from "./compressedTex";
 
@@ -604,6 +605,22 @@ export function pbCharaMaterial(src: THREE.Material, mtl: PbMtl, fog = false): T
     m.addEventListener("dispose", () => detailPending.delete(m));
     loadDetail(m);
   }
+  const finish = masteryFinish(s.userData.masteryFinish);
+  if (finish) applyMasteryFinish(m, finish);
+  else if (s.userData.masteryCamo === "gold" || s.userData.masteryCamo === "silver") {
+    m.fragmentShader = m.fragmentShader.replace("D.rgb *= baseColor;", `
+      float detail = dot(D.rgb, vec3(0.299, 0.587, 0.114));
+      float contour = pow(0.5 + 0.5 * sin(vPbUv.x * 190.0 + sin(vPbUv.y * 42.0) * 4.0), 20.0);
+      float relief = clamp(0.42 + detail * 1.8 + contour * 0.10, 0.2, 1.0);
+      bool grip = vPbUv.x > 0.39 && vPbUv.x < 0.70 && vPbUv.y > 0.68;
+      D.rgb = grip ? vec3(detail) : baseColor * relief;
+    `);
+    m.fragmentShader = m.fragmentShader.replace("// Phong_D_Dir_", `// Phong_D_Dir_
+      vec3 eye = normalize(cameraPosition - vPbWorldPos);
+      float sheen = pow(1.0 - abs(dot(normalize(N), eye)), 3.0);
+      if (!grip) c += baseColor * (0.07 + sheen * 0.22);
+    `);
+  }
   return common(src, m);
 }
 
@@ -617,7 +634,7 @@ export function applyPbCharaLighting(root: THREE.Object3D, mtl: PbMtl): void {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     const conv = (mat: THREE.Material): THREE.Material => {
-      if (mat.userData.pb || !mat.colorWrite) return mat; // PB already / shadow-only proxies
+      if (mat.userData.pb || mat.userData.pbPhysicalFinish || !mat.colorWrite) return mat; // PB already / shadow-only proxies
       let n = done.get(mat);
       if (!n) {
         n = pbCharaMaterial(mat, mtl);

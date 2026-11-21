@@ -16,6 +16,8 @@ import { WebSignaling, signalRoomKey } from "./signaling.ts";
 import { HANDOFF_VERSION, receiveHandoff, sendHandoff, type HandoffEnvelope } from "./handoff.ts";
 
 export interface P2POptions {
+  /** Cancel a pending match start when the room is left or its preparation ends. */
+  signal?: AbortSignal;
   session: MatchSession;
   serverUrl: string;
   /** the leader's / guest's Server.Game room session (null in offline tests) */
@@ -74,26 +76,37 @@ export async function awaitHandoff(o: { serverUrl: string; session: MatchSession
  * memory saver, which is what silently killed a host that went AFK behind other tabs. */
 function keepAlive(): () => void {
   let release: (() => void) | null = null;
+  let stopped = false;
   try {
-    void navigator.locks?.request("pbweb-p2p", () => new Promise<void>((r) => { release = r; })).catch(() => {});
+    // [RECRIADO] Each tab needs its own hold; exclusive locks would queue every other player on this origin.
+    void navigator.locks?.request("pbweb-p2p", { mode: "shared" }, () => new Promise<void>((r) => {
+      if (stopped) r(); else release = r;
+    })).catch(() => {});
   } catch { /* no Web Locks (Node tests) */ }
-  return () => release?.();
+  return () => { stopped = true; release?.(); };
 }
 
 export async function openP2P(o: P2POptions): Promise<P2PHandle> {
+  o.signal?.throwIfAborted();
   const { session } = o;
   const leader = o.leader ?? !!o.room?.isLeader;
   const key = signalRoomKey(session.uniqueRoomId, session.roomSeed);
   const log = o.log ?? ((l: string) => console.log(`[p2p] ${l}`));
   if (!leader) {
     const sig = new WebSignaling(o.serverUrl, key, "guest", session.slot, session.signalTicket);
-    const ice = iceConfig(await sig.ready, o.relayOnly);
-    await sig.hostReady(o.hostWaitMs);
-    log(`room ${key}: host online, connecting slot ${session.slot}`);
-    const transport = await RtcGuestTransport.connect(sig, ice, { RTCPeerConnection: o.RTCPeerConnection });
-    sig.close(); // the link is up: no more signaling for this battle
-    const unlock = keepAlive();
-    return { transport, leader, stop: () => { unlock(); transport.close(); } };
+    const abort = () => sig.close();
+    o.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const ice = iceConfig(await sig.ready, o.relayOnly);
+      await sig.hostReady(o.hostWaitMs);
+      log(`room ${key}: host online, connecting slot ${session.slot}`);
+      const transport = await RtcGuestTransport.connect(sig, ice, { RTCPeerConnection: o.RTCPeerConnection, signal: o.signal });
+      const unlock = keepAlive();
+      return { transport, leader, stop: () => { unlock(); transport.close(); } };
+    } finally {
+      o.signal?.removeEventListener("abort", abort);
+      sig.close(); // success or failure: a retry must not leave the old guest authenticated
+    }
   }
 
   // the match Worker first: the guests see the host online on /signal only once it can answer
@@ -101,13 +114,20 @@ export async function openP2P(o: P2POptions): Promise<P2PHandle> {
   // Clube da Luta: the host only lets the bare fist hit (matchCore loadoutOf); the room's stage is the only place it shows
   const knuckle = o.room?.room?.stage === KNUCKLE_STAGE ? { config: { barefistOnly: true } } : {};
   const local = await LocalHost.start((o.worker ?? LocalHost.browserWorker)(), { uniqueRoomId: session.uniqueRoomId, roomSeed: session.roomSeed, data, ...knuckle, ...(o.restore ? { restore: o.restore.core } : {}) });
+  if (o.signal?.aborted) { local.stop(); o.signal.throwIfAborted(); }
   const sig = new WebSignaling(o.serverUrl, key, "host", session.slot, session.signalTicket);
+  const abort = () => sig.close();
+  o.signal?.addEventListener("abort", abort, { once: true });
   let ice: RTCConfiguration;
   try {
     ice = iceConfig(await sig.ready, o.relayOnly);
+    o.signal?.throwIfAborted();
   } catch (e) {
+    sig.close();
     local.stop();
     throw e;
+  } finally {
+    o.signal?.removeEventListener("abort", abort);
   }
   const room = o.room;
   const rtc = new RtcHost(local, sig, ice, {

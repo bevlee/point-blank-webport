@@ -115,7 +115,7 @@ export const DEFAULT_ROUNDS_KILLTIME = 0x03;
 export const DEFAULT_DESTROY_KILLTIME = 0x02;
 /** killTime a mode starts with when the arrows pick it */
 export const defaultKillTimeOf = (md: RoomMode): number => (md.destroy ? DEFAULT_DESTROY_KILLTIME : md.rounds ? DEFAULT_ROUNDS_KILLTIME : DEFAULT_KILLTIME);
-export const roundsText = (kt: number): string => `${ROUNDS[kt & 15] ?? 3} Rodadas`;
+export const roundsText = (kt: number): string => `${ROUNDS[kt & 15] ?? 3} Rounds`;
 
 export const killsText = (kt: number): string => `${KILLS[kt & 15] ?? 60} Kills`;
 export const timeText = (kt: number): string => `${TIMES_MIN[(kt >> 4) & 15] ?? 10} ${T.minutes}`;

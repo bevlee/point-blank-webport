@@ -104,7 +104,7 @@ async function executeTitle(target: string | undefined, isNick: boolean, p: Acco
   if (t.playerId !== p.playerId && t.access > p.access) return `Title failed! (Can't Change Higher Access Level Than Yours)`;
   const n = await unlockAllTitles(t);
   const online = !!t.connection;
-  if (n > 0 && online) toChat(t, `Todos os títulos foram liberados por ${p.nickname}.`);
+  if (n > 0 && online) toChat(t, `All titles were unlocked by ${p.nickname}.`);
   return `Title All Titles Opened To UID: ${t.playerId} (${t.nickname}) - ${n} new${online ? "" : " (offline, applies at next login)"}`;
 }
 
@@ -203,7 +203,7 @@ const COMMANDS: Command[] = [
       const chunk = mine.slice((page - 1) * 5, page * 5);
       line(`Commands (${page}/${pages}) - ":help <command>" shows syntax and examples:`);
       for (const c of chunk) line(`:${c.command} ${c.args} -> ${c.description}`);
-      if (page === pages) { line("Comandos de jogador (todos), digite no chat:"); for (const l of PLAYER_HELP) line(l); }
+      if (page === pages) { line("Player commands (everyone), enter in chat:"); for (const l of PLAYER_HELP) line(l); }
       return `Displayed commands page '${page}' of '${pages}'`;
     },
   },
@@ -324,7 +324,7 @@ const COMMANDS: Command[] = [
         case "reload":
           if (val === "pase") { await loadBattlePass(); send(p, seasonChallengeInfoAck(p)); return "Refresh CHALLENGE_INFO_ACK!"; }
           if (val === "classic_mode") return "Refresh Classic Mode Manager!";
-          return `${titleCase(opt)} Opción de 'reload' no válida: ${val}. Use 'pase' o 'classic_mode'.`;
+          return `${titleCase(opt)} Invalid reload option: ${val}. Use 'pase' o 'classic_mode'.`;
         case "title":
           if (val !== "all") return `${titleCase(opt)} Arguments was not valid!`;
           void unlockAllTitles(p);
@@ -377,8 +377,8 @@ const COMMANDS: Command[] = [
       if (t.playerId === p.playerId) return "Can't mute yourself";
       if (t.access > p.access) return "Can't mute Higher Access Level Than Yours";
       await applyMute(t.playerId, minutes, `GM :mute by ${p.nickname}`);
-      if (minutes === 0) { send(t, lobbyChatAck(0, "Server", 5, false, "Você pode falar no chat novamente.")); return `Player '${t.nickname}' has been un-muted`; }
-      send(t, lobbyChatAck(0, "Server", 5, false, `Você foi silenciado por ${minutes} minutos por um moderador.`));
+      if (minutes === 0) { send(t, lobbyChatAck(0, "Server", 5, false, "You can use chat again.")); return `Player '${t.nickname}' has been un-muted`; }
+      send(t, lobbyChatAck(0, "Server", 5, false, `You were muted for ${minutes} minutes by a moderator.`));
       toAllChat(`Player '${t.nickname}' has been muted for ${minutes} Minutes!`);
       return `Player '${t.nickname}' muted for ${minutes} Minutes`;
     },

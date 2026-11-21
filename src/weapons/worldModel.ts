@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { createPhysicalFinish, physicalFinish } from "../render/physicalFinish";
+import { masteryFinish } from "../render/masteryFinish";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { registerModelCompressedTextures } from "../render/compressedTex";
 import { loadLodFirst } from "../assetLod";
@@ -235,9 +237,13 @@ export async function createWeaponModel(key: string | number, family?: Family, o
   let entry = (packId !== null ? list.find((e) => e.itemIds?.includes(packId)) : undefined) ?? pickWeaponModel(list, name, fam);
   if (!entry) return null;
   if (opts.projectile) entry = list.find((e) => e.id === `${entry!.id}_bomb`) ?? entry;
+  const camo = typeof location !== "undefined" ? new URLSearchParams(location.search).get("m4camo") : null;
+  const mockup = (camo === "gold" || camo === "silver" || camo === "black" || camo === "darkmatter") && name.toLowerCase().includes("m4a1");
+  if (mockup) entry = list.find((e) => e.id === "m4a1") ?? entry;
   const tpl = await loadGlb(entry);
   if (!tpl) return null;
   const object = tpl.clone(true);
+  if (mockup) applyMasteryCamo(object, camo === "darkmatter" ? "darkmatter" : camo === "black" ? "black" : camo === "gold" ? "gold" : "silver");
   return {
     object,
     muzzle: object.getObjectByName(entry.muzzle ?? "FXDummy") ?? null,
@@ -246,4 +252,26 @@ export async function createWeaponModel(key: string | number, family?: Family, o
     axis: (tpl.userData.axis as THREE.Matrix4 | undefined)?.clone() ?? new THREE.Matrix4(),
     animator: (view) => loadWeaponAnimSet(entry.id).then((set) => (set ? new WeaponAnimator(object, set, view) : null)),
   };
+}
+
+/** Opt-in material study on the original M4A1 mesh; ?m4camo=gold|silver|black|darkmatter. */
+function applyMasteryCamo(object: THREE.Group, finish: "gold" | "silver" | "black" | "darkmatter"): void {
+  object.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const recolor = (source: THREE.Material): THREE.Material => {
+      if (!(source instanceof THREE.MeshStandardMaterial) || source.name !== "m4a1") return source;
+      if (new URLSearchParams(location.search).get("m4finish") === "physical") return createPhysicalFinish(source, physicalFinish(finish));
+      const material = source.clone();
+      // Keep the original UV texture's mechanical detail and polymer separation.
+      material.color.set(finish === "darkmatter" ? 0x6733bb : finish === "black" ? 0x30353e : finish === "gold" ? 0xffce63 : 0xe4eeff);
+      material.userData.masteryCamo = finish;
+      material.userData.masteryFinish = finish === "darkmatter" ? "bo3-dark-matter" : finish === "black" ? "black-chrome" : masteryFinish(new URLSearchParams(location.search).get("m4finish"));
+      material.metalness = 0.35;
+      material.roughness = 0.27;
+      material.emissive.set(finish === "black" ? 0x000000 : finish === "gold" ? 0x392206 : 0x151e2a);
+      material.emissiveIntensity = 0.25;
+      return material;
+    };
+    node.material = Array.isArray(node.material) ? node.material.map(recolor) : recolor(node.material);
+  });
 }

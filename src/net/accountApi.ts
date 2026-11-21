@@ -1,7 +1,7 @@
 // The account API lives in the same process as the PB WebSocket endpoints (server/src/web), port 8090.
 // Production build: VITE_API_URL = the server's https origin (Cloud Run), the page itself being
 // on another origin (Firebase Hosting), which the server's CORS list has to allow.
-const ACCOUNT_API_PORT = 8090;
+import { backendOrigin } from "./serviceUrl.ts";
 /** import.meta.env is undefined outside Vite (the Node tests) */
 const API_URL = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL;
 
@@ -20,8 +20,8 @@ export class AccountApiError extends Error {
   }
 }
 
-function accountApiUrl(path: string): string {
-  return API_URL ? `${API_URL.replace(/\/+$/, "")}${path}` : `http://${location.hostname}:${ACCOUNT_API_PORT}${path}`;
+export function accountApiUrl(path: string): string {
+  return `${(API_URL || backendOrigin()).replace(/\/+$/, "")}${path}`;
 }
 
 async function postCredentials(path: string, username: string, password: string): Promise<AccountApiResult> {

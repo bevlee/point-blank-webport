@@ -252,6 +252,17 @@ export class RespawnSelection {
     };
   }
 
+  selectKit(kit: RespawnLoadout): void {
+    if (!this.isOpen) return;
+    this.rebuild(); this.restore(kit);
+  }
+
+  selectItem(slot: RespawnSlot, itemId: number): void {
+    if (!this.isOpen || !slotAllowed(slot, this.weaponsFlag)) return;
+    const i = RESPAWN_SLOTS.indexOf(slot), index = this.lists[i].indexOf(itemId);
+    if (index >= 0) this.index[i] = index;
+  }
+
   cycle(i: number, dir: 1 | -1): void {
     const n = this.lists[i]?.length ?? 0;
     if (n < 2 || !slotAllowed(RESPAWN_SLOTS[i], this.weaponsFlag)) return;

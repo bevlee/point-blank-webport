@@ -47,7 +47,7 @@ export interface PbCharacter {
  */
 export const PB_CHARA: PbCharacter = {
   // exe-2017 getFullHP 0x5454c0: default 100 (0x54550b), else CCharaInfo HP (+0x11ec, 0x534d10). Cross SWAT_Male HP 100.
-  // Per-character HP of a real match comes from charaHp.ts.
+  // All player characters use this fixed health pool.
   hp: 100,
   run: { front: 6.5, side: 6, diagonal: 6, back: 6 },
   // Cross SWAT_Male WalkFrontMove 4.2, WalkSideMove / WalkDiagonalMove / WalkBackMove 4 (was 3.123 4.15 / 3.95)
@@ -64,8 +64,8 @@ export const PB_CHARA: PbCharacter = {
   camIKHeight: [1.407, 1.062, 0.86, 1.407],
   // exe-2017 CCharaInfo::ReadDamageRateInfo 0x534a20 reads these raw (no scaling). Source: PBCross Character.pef Reinforced_SWAT_Male.DamageRate,
   // = cross/weapons/weapons.json charaDamageRate.SWAT_Male (checked 2026-10-13, identical). Constant, not read at runtime (sync value).
-  // `head` is NOT a multiplier on a human target: see HEAD_HIT_DAMAGE.
-  damageRate: { head: 35, body: 1.2, arm: 0.8, hand: 0.6, leg: 0.8, foot: 0.6 },
+  // Current balance overrides the extracted part rates.
+  damageRate: { head: 1.5, body: 1, arm: 0.8, hand: 0.8, leg: 0.8, foot: 0.8 },
   // Movement_ladder: the Cross Character.pef has no ladder node, so CCharaInfo's 8 ladder floats (reader 0x534a1e -> +0x138c..+0x13a8)
   // keep the constructor 0.0 (0x53371a..0x53378c). Consumer: GetMoveSpeed 0x53fa20 returns, while chara state 0x10 (on a ladder),
   // GetLadderSpeed 0x53f940 (walk/run x front/side/diagonal/back getters 0x536620..0x536770) + the equipment bonus (+0xc98), with no

@@ -34,15 +34,15 @@ const NOTE_MAX = 240;
 export const NOTE_HIDDEN = [/^cmNoteGift/, /^cmNoteSel\d+$/, /^cmNoteSlot\d+$/, /^cmNoteFocus$/, /^cmNoteKey$/, /^cmNoteGage/, /^cmNoteSeparate/];
 
 export const NOTE_TEXTS: Texts = {
-  cmNoteListTab: ["STR_POPUP_NOTE", "Msg."],
-  cmNoteListWho: ["STR_POPUP_SENDER_1", "Remetente"],
-  cmNoteListContent: ["STR_POPUP_CONTENT", "Conteúdo"],
-  cmNoteListDate: ["STR_POPUP_REMAIN_DAY", "Dias restantes"],
-  cmNoteWrite: ["STR_POPUP_WRITE_NOTE", "Escrever"],
-  cmNoteSend: ["STR_POPUP_SEND", "Enviar"],
-  cmNoteClose: ["STR_POPUP_CLOSE", "Fechar"],
-  cmNoteAccept: ["STR_POPUP_ACCEPT", "Aceitar"],
-  cmNoteReject: ["STR_POPUP_REFUSE", "Recusar"],
+  cmNoteListTab: ["STR_POPUP_NOTE", "Note"],
+  cmNoteListWho: ["STR_POPUP_SENDER_1", "Sender"],
+  cmNoteListContent: ["STR_POPUP_CONTENT", "Content"],
+  cmNoteListDate: ["STR_POPUP_REMAIN_DAY", "Time"],
+  cmNoteWrite: ["STR_POPUP_WRITE_NOTE", "Write Note"],
+  cmNoteSend: ["STR_POPUP_SEND", "Send"],
+  cmNoteClose: ["STR_POPUP_CLOSE", "Close"],
+  cmNoteAccept: ["STR_POPUP_ACCEPT", "Accept"],
+  cmNoteReject: ["STR_POPUP_REFUSE", "Decline"],
 };
 
 type Card = "read" | "write" | "reply";
@@ -183,7 +183,7 @@ export class NotesPage {
     const conn = chat.connection;
     if (!conn) return;
     const text = (this.body?.value ?? "").trim();
-    if (!text) { this.say(this.str("STR_POPUP_INPUT_NOTE", "Digite o conteúdo da mensagem.")); return; }
+    if (!text) { this.say(this.str("STR_POPUP_INPUT_NOTE", "Please write your note")); return; }
     let err: number;
     if (this.card === "reply") {
       const n = this.selected();
@@ -191,13 +191,13 @@ export class NotesPage {
       err = await replyNote(conn, n.senderId, text);
     } else {
       const nick = (this.who?.value ?? "").trim();
-      if (!nick) { this.say(this.str("STR_POPUP_MESSAGE_INPUT_RECEIVER", "Digite o nick do destinatário.")); return; }
-      if (nick === chat.myNick) { this.say(this.str("STR_POPUP_MESSAGE_SEND_SELF", "Não é possível enviar mensagem para você mesmo.")); return; }
+      if (!nick) { this.say(this.str("STR_POPUP_MESSAGE_INPUT_RECEIVER", "Please Input Recipient")); return; }
+      if (nick === chat.myNick) { this.say(this.str("STR_POPUP_MESSAGE_SEND_SELF", "You can't send a message to yourself")); return; }
       err = await sendNote(conn, nick, text);
     }
     if (err === 0) { this.card = null; this.draw(); return; }
-    if (err === NoteErr.FULL) this.say(this.str("STR_POPUP_MESSAGE_DELETE_FULL_NOTE", "Caixa de entrada lotada.\nTente excluir as mensagens desnecessárias \npara poder receber novas mensagens."));
-    else this.say(this.str("STR_TBL_GUI_BASE_FAIL_SEND_NOTE", "Não conseguiu enviar mensagem."));
+    if (err === NoteErr.FULL) this.say(this.str("STR_POPUP_MESSAGE_DELETE_FULL_NOTE", "Unable to receive messages: Inbox full"));
+    else this.say(this.str("STR_TBL_GUI_BASE_FAIL_SEND_NOTE", "Failed to send the message."));
     this.draw();
   }
 
@@ -216,13 +216,13 @@ export class NotesPage {
   private askDelete(): void {
     const ids = this.deleteIds();
     if (!ids.length) return;
-    this.ask(this.str("STR_POPUP_Q_MESSAGE_DELETE_NOTE", "Deseja excluir a mensagem selecionada?"), () => void this.doDelete(ids));
+    this.ask(this.str("STR_POPUP_Q_MESSAGE_DELETE_NOTE", "Delete the note chosen?"), () => void this.doDelete(ids));
   }
 
   private async doDelete(ids: number[]): Promise<void> {
     const conn = chat.connection;
     const err = conn ? await deleteNotes(conn, ids) : NoteErr.FAIL;
-    if (err) this.say(this.str("STR_TBL_GUI_BASE_FAIL_DELETE_NOTE", "Não foi possível excluir a mensagem."));
+    if (err) this.say(this.str("STR_TBL_GUI_BASE_FAIL_DELETE_NOTE", "Could not delete the message."));
     else { noteList.remove(ids); this.checked.clear(); this.sel = -1; this.card = null; }
     this.draw();
   }
@@ -234,13 +234,13 @@ export class NotesPage {
     if (!n || !conn) return;
     const r = await answerClanNote(conn, n, accept);
     noteList.mark([n.id], NoteState.READ, READ_DAYS);
-    if (!r.ok) this.say(this.str("STR_TBL_GUI_BASE_FAIL_JOIN_CLAN", "Não foi possível entrar no clã."));
+    if (!r.ok) this.say(this.str("STR_TBL_GUI_BASE_FAIL_JOIN_CLAN", "Could not join the clan."));
     this.draw();
   }
 
   private contentText(n: Note): string {
     if (n.type === NoteType.GIFT) return itemName(giftGoodsId(n)).name;
-    return isClanAsk(n.type) ? this.str("STR_POPUP_CLAN_INVITE_NOTE", "Convite para o clã") : n.text;
+    return isClanAsk(n.type) ? this.str("STR_POPUP_CLAN_INVITE_NOTE", "Clan invitation") : n.text;
   }
 
   /**
@@ -250,7 +250,7 @@ export class NotesPage {
    */
   private askTake(n: Note): void {
     const c = this.ctx.ctl;
-    c.msg = { text: "Deseja receber o presente?", onOk: () => void this.takeGift(n), onCancel: () => {} };
+    c.msg = { text: "Accept this gift?", onOk: () => void this.takeGift(n), onCancel: () => {} };
     this.draw();
   }
 
@@ -267,8 +267,8 @@ export class NotesPage {
       noteList.remove([n.id]);
       this.sel = -1;
       this.card = null;
-      this.say(this.str("STR_SHOP_INFORM_SUCCESS_GIFT", "O presente foi enviado ao seu inventário."));
-    } else this.say(this.str("STR_SHOP_FAILED_GIFT", "Falha na inserção de presente no inventário por problemas de rede."));
+      this.say(this.str("STR_SHOP_INFORM_SUCCESS_GIFT", "Your present has been delivered to your inventory."));
+    } else this.say(this.str("STR_SHOP_FAILED_GIFT", "A network error has occured and your present was not sent."));
     this.draw();
   }
 
@@ -322,7 +322,7 @@ export class NotesPage {
     const clan = !!n && (n.type === NoteType.CLAN || isClanAsk(n.type));
     // receiver field: typed when writing, the sender's nick when reading or replying
     if (this.who) { this.who.readOnly = card !== "write"; if (card !== "write") this.who.value = n?.sender ?? ""; }
-    g.setText("cmNoteWhoKey", card === "write" ? this.str("STR_POPUP_RECEIVER", "Para:") : clan ? this.str("STR_POPUP_CLAN_SENDER", "Clã") : this.str("STR_POPUP_SENDER_2", "Remetente"));
+    g.setText("cmNoteWhoKey", card === "write" ? this.str("STR_POPUP_RECEIVER", "Recipient") : clan ? this.str("STR_POPUP_CLAN_SENDER", "Clan") : this.str("STR_POPUP_SENDER_2", "Sender"));
     if (this.body) this.body.style.display = writing ? "block" : "none";
     const gift = card === "read" && !!n && n.type === NoteType.GIFT;
     this.paintGift(gift ? n : null);
@@ -332,7 +332,7 @@ export class NotesPage {
     }
     g.show("cmNoteAccept", !!this.clanAsk() || !!this.giftSel());
     g.show("cmNoteReject", !!this.clanAsk());
-    g.setText("cmNoteSend", card === "read" ? this.str("STR_POPUP_REPLY", "Responder") : this.str("STR_POPUP_SEND", "Enviar"));
+    g.setText("cmNoteSend", card === "read" ? this.str("STR_POPUP_REPLY", "Reply") : this.str("STR_POPUP_SEND", "Send"));
     g.show("cmNoteSend", !clan && !gift);
   }
 }

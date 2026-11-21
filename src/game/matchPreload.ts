@@ -25,7 +25,6 @@ import { upperClassOf } from "./charAnim";
 import { preloadCharSfx } from "./charSfx";
 import { preloadHudArt } from "./pbHud/PbHud";
 import { preloadAmbient } from "./audio3d";
-import { loadCharaHp } from "../gameplay/charaHp";
 import { currentMapProps, propSoundFiles } from "./mapProps";
 import { radioVoiceOf } from "./charGender";
 import { preloadBomb } from "./bombVisual";
@@ -147,7 +146,6 @@ export async function preloadMatch(set: MatchSet): Promise<WarmSet> {
     preloadFx(defs, breakFx).then((o) => { objects.push(...o); }),
     sfx.preloadFiles(breakSnd),
     preloadRadioVoices(voices),
-    loadCharaHp(),
   ]);
   // one visual per character model of the match (skinned PB shader + its textures)
   const seen = new Set<string | null>();

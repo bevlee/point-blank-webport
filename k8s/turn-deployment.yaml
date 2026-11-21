@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pb-turn
+  namespace: pb
+  labels: {app: pb-turn}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app: pb-turn}
+  template:
+    metadata:
+      labels: {app: pb-turn}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: turn
+          image: docker.io/bevdev1/pb-turn
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              umask 077
+              cat /etc/pb-turn/base.conf > /tmp/turnserver.conf
+              printf '\nexternal-ip=%s/%s\nrelay-ip=%s\nuser=%s:%s\n' "$TURN_PUBLIC_IP" "$POD_IP" "$POD_IP" "$TURN_USERNAME" "$TURN_CREDENTIAL" >> /tmp/turnserver.conf
+              exec turnserver -c /tmp/turnserver.conf
+          envFrom:
+            - secretRef: {name: pb-turn}
+            - configMapRef: {name: pb-turn-address}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef: {fieldPath: status.podIP}
+          ports:
+            - {name: turn-tcp, containerPort: 3478, protocol: TCP}
+            - {name: turn-udp, containerPort: 3478, protocol: UDP}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          readinessProbe:
+            tcpSocket: {port: turn-tcp}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: turn-tcp}
+            periodSeconds: 15
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: config, mountPath: /etc/pb-turn, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
+        - name: config
+          configMap: {name: pb-turn-config}

@@ -11,9 +11,15 @@ import { ShopCatalog } from "../../../net/shopCatalog.ts";
 import { PlayerStore } from "../../state/PlayerStore.ts";
 import { ShopStore } from "../../state/ShopStore.ts";
 import { itemName, setClientItemNames, setItemNameTable } from "../../state/itemNames.ts";
-import { PAGE, defaultMenuUi, inventoryData, shopData, shopOffers } from "../model.ts";
+import { PAGE, defaultMenuUi, inventoryData, optionText, shopData, shopOffers } from "../model.ts";
 
 const V = JSON.parse(readFileSync(new URL("../../../net/test/meta-vectors.json", import.meta.url), "utf8")) as { vectors: { conn: string; op: number; hex: string; step: string }[] };
+test("activated weapon offers show their actual duration; coupons keep quantity", () => {
+  const option = { goodId: 1, itemId: 103001, count: 100, priceGold: 12750, priceCash: 0, visibility: 1, tag: 0 };
+  const item = { itemId: 103001, authType: 1, buyType2: 2, buyType3: 2, title: 0, titleFlag: 0 };
+  assert.equal(optionText(option, { itemId: item.itemId, item, options: [option] }), "1m 40s");
+  assert.match(optionText(option, { itemId: 1700001, item: { ...item, itemId: 1700001 }, options: [option] }), /^100 /);
+});
 const rd = (op: number, step: string, conn?: string) => new PacketReader(fromHex(V.vectors.find((v) => v.op === op && v.step === step && (!conn || v.conn === conn))!.hex), 2);
 function player(): PlayerStore {
   const p = new PlayerStore();
@@ -28,7 +34,7 @@ test("inventory data: 9 slots max, equipped flags, filters", () => {
   const d = inventoryData(p, ui);
   assert.ok(d.slots.length <= PAGE && d.slots.length > 0);
   const prim = d.slots.find((s) => s.itemId === p.weaponLoadout().primary)!;
-  assert.equal(prim.button, "Equipado");
+  assert.equal(prim.button, "Equipped");
   const thr = inventoryData(p, { ...ui, filter: "throw" });
   assert.ok(thr.slots.every((s) => Math.floor(s.itemId / 100000) === 4));
 });

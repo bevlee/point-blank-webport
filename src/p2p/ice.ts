@@ -13,7 +13,7 @@ export function iceConfig(fromServer: RTCIceServer[] = [], relayOnly = false): R
   /** import.meta.env is undefined outside Vite (the Node tests) */
   const stun = list((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_STUN_URLS);
   const iceServers: RTCIceServer[] = [...fromServer, ...(stun.length ? [{ urls: stun }] : [])];
-  if (!iceServers.some((s) => [s.urls].flat().some((u) => /^stuns?:/.test(u)))) iceServers.unshift({ urls: DEFAULT_STUN });
+  if (!relayOnly && !iceServers.length) iceServers.push({ urls: DEFAULT_STUN });
   if (relayOnly && !iceServers.some(isTurn)) console.warn("[p2p] relay only without a TURN server (TURN_URLS / CF_TURN_* on the server): the link will fail");
   return { iceServers, iceTransportPolicy: relayOnly ? "relay" : "all" };
 }

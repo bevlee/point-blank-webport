@@ -141,7 +141,7 @@ export interface UserInfoBasic {
   nickname: string;
   /** GetDisplayRank() */
   rank: number;
-  /** GetRank() high-water */
+  /** Actual progression rank, unaffected by the cosmetic display rank. */
   rankHigh: number;
   gold: number;
   exp: bigint;

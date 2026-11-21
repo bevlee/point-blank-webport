@@ -11,7 +11,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { RTCPeerConnection } from "node-datachannel/polyfill";
+import { RTCPeerConnection as NativePeerConnection } from "node-datachannel/polyfill";
+const peerConnections: NativePeerConnection[] = [];
+class RTCPeerConnection extends NativePeerConnection {
+  constructor(configuration: RTCConfiguration = {}) { super(configuration); peerConnections.push(this); }
+}
 import { PbBattleNet } from "../../net/battle.ts";
 import { signalTicketEnv, testTicket } from "./signalTickets.ts";
 import { buildGameData, encodeUserAction, type ActionIn } from "../../net/matchUdp.ts";
@@ -75,7 +79,7 @@ async function main(): Promise<void> {
   const roomSeed = (36 << 20) | (1 << 12) | 4;
   const roster = [{ slot: 0, name: "A", team: 0 as const }, { slot: 1, name: "B", team: 1 as const }];
 
-  const common = { RTCPeerConnection: RTCPeerConnection as unknown as typeof globalThis.RTCPeerConnection, data, log: (l: string) => hostLog.push(l) };
+  const common = { relayOnly: process.env.PB_TEST_RELAY_ONLY === "1", RTCPeerConnection: RTCPeerConnection as unknown as typeof globalThis.RTCPeerConnection, data, log: (l: string) => hostLog.push(l) };
   const A = new PbBattleNet({ session: { uniqueRoomId, roomSeed, slot: 0, accountId: 0x11, signalTicket: testTicket(uniqueRoomId, roomSeed, 0) }, roster, serverUrl: GW, p2p: { ...common, leader: true, worker: nodeWorker } });
   const B = new PbBattleNet({ session: { uniqueRoomId, roomSeed, slot: 1, accountId: 0x22, signalTicket: testTicket(uniqueRoomId, roomSeed, 1) }, roster, serverUrl: GW, p2p: { ...common, leader: false } });
 
@@ -106,6 +110,14 @@ async function main(): Promise<void> {
   A.setRespawnCount(1);
   B.setRespawnCount(1);
   await sleep(100);
+
+  if (process.env.PB_TEST_RELAY_ONLY === "1") {
+    for (const [index, pc] of peerConnections.entries()) {
+      const stats: RTCStatsReport = await pc.getStats();
+      const candidates = [...stats.values()].filter((entry) => entry.type === "local-candidate");
+      check(`peer ${index}: selected candidate is TURN relay`, candidates.length > 0 && candidates.every((entry) => entry.candidateType === "relay"), candidates.map((entry) => entry.candidateType).join(","));
+    }
+  }
 
   // ---- positions + 3PV ActionState both ways, 25 Hz for 3 s
   const gotA: PlayerState[] = [], gotB: PlayerState[] = [];

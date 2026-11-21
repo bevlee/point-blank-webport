@@ -12,7 +12,7 @@
 //                    without a rank (bots, offline) shows rank 0, as the TAB board (crossScore.ts) [INFERIDO]
 //                    Exp / Pino: the 5140 table (18 slots, roomClient.ts) per row; a row without a room slot (bots, offline) is blank
 //   local row        Result_SelectBar moves to the local row
-//   confirm          Result_Confirm: the sprite already carries "Confirmar" (ingame_result 771,834); no caption drawn on it [INFERIDO]
+//   confirm          Result_Confirm: native sprite, with an English caption over its baked lettering
 // Not in the Cross screen (no control in the file): map / mode title, clan block, Score / Reward tabs (one page now).
 import { I3Gui, cloneNode, type GNode } from "../../lobby/ui/i3Gui.ts";
 import { UI_BASE } from "../../lobby/ui/assets.ts";
@@ -59,6 +59,17 @@ export class CrossFinal {
     parent.appendChild(this.root);
     this.gui = new I3Gui({ base: CROSS });
     this.gui.build(cloneNode(tree), this.root, 0, 0);
+    // [RECRIADO] Portable bakes the Korean title into the background. Cover its lettering, retaining the native window.
+    const title = document.createElement("div");
+    title.textContent = "Game Results";
+    title.style.cssText = "position:absolute;left:25%;top:8px;width:50%;height:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(#17191a,#101112);color:#fff;font:bold 18px Arial,sans-serif;pointer-events:none";
+    this.gui.get("Result_BG")?.el.appendChild(title);
+    // The header cells align with the existing row fields; supply the labels missing from this client export.
+    for (const prefix of ["WinBarText", "LoseBarText"]) {
+      for (const [cell, caption] of [[4, "Player"], [5, "Kills"], [6, "Deaths"], [7, "Obj."], [8, "EXP"], [9, "Points"], [10, "Score"]] as const) {
+        this.gui.setText(`${prefix}${cell}`, caption);
+      }
+    }
     for (const n of WORLD) this.gui.hide(n);
     this.gui.get("Result_Confirm")!.el.style.pointerEvents = "auto";
     this.gui.button("Result_Confirm", () => this.onOk());
@@ -74,13 +85,12 @@ export class CrossFinal {
   }
 
   private fill(f: FinalData, rows: HudRow[]): void {
-    const won = [f.winner === 0, f.winner === 1];
     this.score("Red", f.red);
     this.score("Blue", f.blue);
     this.gui.setState("TeamBarWin", 0);
     this.gui.setState("TeamBarLose", 1);
-    this.gui.show("WinBarText", won[0]);
-    this.gui.show("LoseBarText", !won[1]);
+    this.gui.show("WinBarText", true);
+    this.gui.show("LoseBarText", true);
     const [top, bottom] = stampShapes(f.winner);
     for (const [name, shape] of [["TeamResultTop", top], ["TeamResultBottom", bottom]] as const) {
       this.gui.setAllShapeEnable(name, false);

@@ -7,6 +7,7 @@
 //   buy a new character      6145 -> 3334 -> 6146 (CREATE_CHARA: the slot comes in 6146, no 2453 follows)
 //   delete a character       6151 -> 6152 + 2453
 // The loadout is updated only after 6150 (server truth; 6149 never gets a 3082, see PlayerStore.applyEquipRequest).
+import { KIT_SLOTS, type EquipmentKit } from "../equipment/loadouts.ts";
 import type { PbConnection } from "../../net/connection.ts";
 import {
   GameMetaOp, acceptGift, buildDeleteChara, buyGoods, changeEquip, createChara, equipRequestFromLoadout, giftGoods, parseChangeInventory, parseCharaInfo,
@@ -92,7 +93,7 @@ export class MetaSession {
   }
 
   private need(): PbConnection {
-    if (!this.conn || !this.conn.isOpen) throw new MetaError("Sem conexão com o servidor de jogo.");
+    if (!this.conn || !this.conn.isOpen) throw new MetaError("Disconnected from game server.");
     return this.conn;
   }
 
@@ -123,7 +124,7 @@ export class MetaSession {
   private async sendEquip(q: CharChangeEquipRequest): Promise<void> {
     const err = await changeEquip(this.need(), q);
     this.player.dispatch({ type: "equipAck", request: q, error: err });
-    if (err !== 0) throw new MetaError(`6150 erro 0x${(err >>> 0).toString(16)}`, err);
+    if (err !== 0) throw new MetaError(`6150 error 0x${(err >>> 0).toString(16)}`, err);
   }
 
   /**: 1050 on a Durable item (starts its period). Resolves after 6150. */
@@ -133,7 +134,7 @@ export class MetaSession {
       // 1047 ITEM_AUTH handler for them), so waiting for 6150 there would time out.
       const r = await equipSingle(this.need(), item.objectId, { equipClass: countIsSeconds(item.itemId) });
       if (r.auth) this.player.dispatch({ type: "itemAuth", item: r.auth });
-      if (r.error !== 0) throw new MetaError(`1050: erro 0x${(r.error >>> 0).toString(16)}`, r.error);
+      if (r.error !== 0) throw new MetaError(`1050: error 0x${(r.error >>> 0).toString(16)}`, r.error);
     });
   }
 
@@ -193,13 +194,28 @@ export class MetaSession {
    * item-use handler instead of equipping (PROTOCOL_CHAR_CHANGE_EQUIP_SINGLE_REQ.cs IsActivatableEquipment),
    * so activation via 1050 IS the whole "Usar" action for them — there is no 6149 to send afterwards.
    */
+  async equipLoadout(kit: EquipmentKit): Promise<void> {
+    const patch: Record<number, { itemId: number; objectId: number }> = {};
+    for (const [index, slot] of KIT_SLOTS.entries()) {
+      const item = this.player.items().find(it => it.itemId === kit[slot]);
+      if (!item && kit[slot]) throw new MetaError(`Equipment is no longer owned: ${kit[slot]}`);
+      if (item && this.player.needsActivation(item)) await this.activate(item);
+      patch[index] = { itemId: kit[slot], objectId: item?.objectId ?? 0 };
+    }
+    return this.serial(async () => {
+      const st = this.player.state;
+      if (!st.loadout) throw new MetaError("Loadout has not arrived yet.");
+      await this.sendEquip(equipRequestFromLoadout(st.loadout, patch, st.charaInfo ?? undefined));
+    });
+  }
+
   async equip(item: InventoryItem, side: number = Side.Red): Promise<void> {
     const slot = equipSlotOf(item.itemId);
     if (this.player.needsActivation(item)) await this.activate(item);
     if (slot === null) return;
     return this.serial(async () => {
       const st = this.player.state;
-      if (!st.loadout) throw new MetaError("Loadout (3082) ainda não recebido.");
+      if (!st.loadout) throw new MetaError("Loadout (3082) has not arrived yet.");
       // a TR/CT character always goes to its own team: the server sets chara_red/blue_side from the slot it is sent in
       if (slot === EquipSlot.Chara) return this.sendEquip(this.charaRequest(item.itemId, charaTeamOf(item.itemId) ?? side));
       await this.sendEquip(equipRequestFromLoadout(st.loadout, { [slot]: { itemId: item.itemId, objectId: item.objectId } }, st.charaInfo ?? undefined));
@@ -212,10 +228,10 @@ export class MetaSession {
    * valid for weapon slots (0-4) or Chara (8): the original always keeps one item equipped there.
    */
   unequip(slot: number): Promise<void> {
-    if (slot < EquipSlot.Head || slot > EquipSlot.Beret) throw new MetaError("Slot não pode ser desequipado.");
+    if (slot < EquipSlot.Head || slot > EquipSlot.Beret) throw new MetaError("This slot cannot be unequipped.");
     return this.serial(async () => {
       const st = this.player.state;
-      if (!st.loadout) throw new MetaError("Loadout (3082) ainda não recebido.");
+      if (!st.loadout) throw new MetaError("Loadout (3082) has not arrived yet.");
       await this.sendEquip(equipRequestFromLoadout(st.loadout, { [slot]: { itemId: 0, objectId: 0 } }, st.charaInfo ?? undefined));
     });
   }
@@ -305,8 +321,8 @@ export class MetaSession {
 export function buyErrorText(code: number, currency: "gold" | "cash" = "gold"): string {
   switch (code >>> 0) {
     case 0x80001018: return currency === "cash" ? "Cash insuficiente." : "Gold insuficiente."; // STBL_IDX_COUPON_USE_FAIL_REASON_LIMIT_MONEY / STBL_IDX_CLAN_NO_POINT
-    case 0x80001017: return "Não é possível comprar este item "; // STR_SHOP_CANNOT_ITEM_BUYING
-    case 0x800010b9: return "Falha na compra (inventário cheio)"; // STBL_IDX_EP_SHOP_BUY_FAIL_CAPTION_E + [RECRIADO] reason
-    default: return `Falha na compra (0x${(code >>> 0).toString(16)})`; // STBL_IDX_EP_SHOP_BUY_FAIL_CAPTION_E
+    case 0x80001017: return "Cannot purchase this item "; // STR_SHOP_CANNOT_ITEM_BUYING
+    case 0x800010b9: return "Purchase failed (inventory full)"; // STBL_IDX_EP_SHOP_BUY_FAIL_CAPTION_E + [RECRIADO] reason
+    default: return `Purchase failed (0x${(code >>> 0).toString(16)})`; // STBL_IDX_EP_SHOP_BUY_FAIL_CAPTION_E
   }
 }

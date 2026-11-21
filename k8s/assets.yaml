@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pb-assets
+  namespace: pb
+  labels: {app: pb}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: oci-bv
+  resources:
+    requests:
+      storage: 50Gi

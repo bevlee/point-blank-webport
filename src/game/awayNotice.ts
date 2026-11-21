@@ -11,7 +11,7 @@ export class AwayNotice {
 
   static async create(host: HTMLElement): Promise<AwayNotice> {
     await loadStrings();
-    const box = await CrossMessageBox.create(host, { caption: tOr("STBL_IDX_COMMON_MSGBOX_CAPTION", "Aviso"), message: " ", modal: false });
+    const box = await CrossMessageBox.create(host, { caption: tOr("STBL_IDX_COMMON_MSGBOX_CAPTION", "Notice"), message: " ", modal: false });
     return new AwayNotice(box);
   }
 
@@ -22,7 +22,7 @@ export class AwayNotice {
     this.box.show(sec !== null);
     if (sec === null) return;
     // the exe formats the string with sprintf: "%dsegundos" stays glued, as in the BR table
-    const text = tOr("STBL_IDX_EP_GAME_AWAY_INPUT_BATTLE", "Como muito tempo não teve movimento será movido para sala %dsegundos depois.");
+    const text = tOr("STBL_IDX_EP_GAME_AWAY_INPUT_BATTLE", "Moving to the room in %d seconds due to inactivity.");
     this.box.setMessage(text.replace("%d", String(sec)));
   }
 

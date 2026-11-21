@@ -50,7 +50,7 @@ import { BOT_WEAPON, loadWeaponSystem, PbWeaponsBridge, type ShotResult, type We
 import { pbHelmetProtection } from "./pbSound";
 import type { WeaponSystem as PbWeaponSystem } from "../weapons/WeaponSystem";
 import { RespawnMenu } from "./respawnMenu";
-import { charaMaxHp, loadCharaHp } from "../gameplay/charaHp";
+import { charaMaxHp } from "../gameplay/charaHp";
 import { jsonOnce } from "../jsonOnce";
 import { RESPAWN_SLOTS, type RespawnInventory, type RespawnLoadout } from "./respawnSelect";
 import { TEST_EQUIPPED } from "./testLoadout";
@@ -107,6 +107,7 @@ export interface GameDeps {
   /** Respawn weapon change (T): owned items + equipped loadout (online: inventoryFromPlayer(PlayerStore)).
    *  Omitted: offline = default loadout + every weapon with a model; net = equipped loadout only. */
   respawnInventory?: RespawnInventory;
+  savedLoadouts?: import("../lobby/equipment/loadouts.ts").SavedLoadouts;
   /**
    * Equipped character itemId of the local side (chara_red_side / chara_blue_side, the RESPAWN pair 8): body shadow +
    * 1PV arms (loadout.ts resolveChara; no model -> the side's basic character). Omitted: the team default.
@@ -466,7 +467,7 @@ export class Game implements BotHost {
     // title character families, applied once at battle start like CStageBattle::_ApplyDesignation 0x7709b0
     this.player.titleMove = { move: titleFxLive.move, jump: titleFxLive.jump, accel: titleFxLive.accel, fall: titleFxLive.fall };
     this.localRank = d.localRank;
-    this.me = new PlayerActor(this.net.localId, d.localName ?? p.get("name") ?? "Você", team, this.player);
+    this.me = new PlayerActor(this.net.localId, d.localName ?? p.get("name") ?? "You", team, this.player);
     this.me.onHurt = (attacker, dealt) => {
       this.onPlayerHurt(attacker);
       // exe 2017: hits (bullets, explosions) go through CalcHitPoint 0x542d1d (local HP dropped): SetShake(2, 2, 0, 0.1).
@@ -590,10 +591,9 @@ export class Game implements BotHost {
       }
     }
     // max HP of the equipped character (server CharaStructure table, same as the P2P host): Reinforced ones get more
-    await loadCharaHp();
     // HP Up coupons: + 5% / 10% of the character's max HP [INFERIDO rounding]
-    g.me.maxHp = Math.round(charaMaxHp(d.localChara) * (1 + (d.itemEffects?.hpUp ?? 0)));
-    g.me.defense = d.itemEffects?.defense ?? 0;
+    g.me.maxHp = charaMaxHp(d.localChara);
+    g.me.defense = 0;
     if (g.match.cfg.mode === "BOMB") await g.initBomb();
     if (g.match.cfg.mode === "DESTROY" || g.match.cfg.mode === "DEFENCE") g.initDestroy();
     if (g.match.cfg.mode === "ANNIHILATION" || g.match.cfg.mode === "ACE") g.initRounds();
@@ -601,6 +601,7 @@ export class Game implements BotHost {
     g.spawnEveryone();
     void RespawnMenu.create(document.getElementById("app") ?? document.body, {
       inventory: d.respawnInventory,
+      savedLoadouts: d.savedLoadouts,
       equippedOnly: g.net.mode === "net",
       weaponsFlag: g.net.weaponsFlag,
       stage: g.net.stage,
@@ -1239,7 +1240,7 @@ export class Game implements BotHost {
     });
     this.bomb.serverFuse = serverFuse;
     this.bombSites = sites;
-    this.hud.setModeName(tOr("STR_HEADER_MODE_EXPLOSION", "Destruição"));
+    this.hud.setModeName(tOr("STR_HEADER_MODE_EXPLOSION", "Bomb"));
     this.match.defenders = 1;
     const pbw = this.pbWeapons();
     if (pbw) {
@@ -1277,9 +1278,9 @@ export class Game implements BotHost {
         prev.end?.(e);
         if (this.disposed) return;
         if (e.motive === 2 && this.bomb?.state === "planted") this.onBombExploded(); // fuse ran out on the server first
-        if (e.motive === 1) this.missionNotice("STBL_IDX_BOMB_MISSION_DEFENCE", "O objetivo foi protegido"); // _ProcessEvent_RoundEnd 0x773cb0 (TimeOut)
+        if (e.motive === 1) this.missionNotice("STBL_IDX_BOMB_MISSION_DEFENCE", "Mission terminated, target secure."); // _ProcessEvent_RoundEnd 0x773cb0 (TimeOut)
         // motive 4 = all dead (team wiped): winner 0 ->, 1 -> red [INFERIDO team mapping, exe 0x769f1c]
-        if (e.motive === 4 && (e.winner === 0 || e.winner === 1)) this.missionNotice(e.winner === 0 ? "STBL_IDX_MISSION_BLUE_ELEMENATE" : "STBL_IDX_MISSION_RED_ELEMENATE", e.winner === 0 ? "Time azul foi totalmente derrotado" : "Time vermelho foi totalmente derrotado");
+        if (e.motive === 4 && (e.winner === 0 || e.winner === 1)) this.missionNotice(e.winner === 0 ? "STBL_IDX_MISSION_BLUE_ELEMENATE" : "STBL_IDX_MISSION_RED_ELEMENATE", e.winner === 0 ? "Blue Team has been eliminated" : "Red Team has been eliminated");
         this.match.score[0] = e.fr;
         this.match.score[1] = e.ct;
         const winner = e.winner === 0 || e.winner === 1 ? e.winner : null;
@@ -1316,7 +1317,7 @@ export class Game implements BotHost {
   /** the objectives are the map's props with `objective` (mapProps.ts). A bullet of ours on an enemy objective goes to the host
    * (ObjectType.Object, server object id); the bars come back in 5167 (onGenerator) and set the objective's life. */
   private initDestroy(): void {
-    this.hud.setModeName(tOr("STR_HEADER_MODE_DESTROY", "Sabotagem"));
+    this.hud.setModeName(tOr("STR_HEADER_MODE_DESTROY", "Destroy"));
     const props = currentMapProps();
     this.defenceMode = this.match.cfg.mode === "DEFENCE";
     // full life of each objective: the server's MapStructure life (Breakdown 6000, Helispot 12000; Defence normal_Tank 6000, armerd_Tank 9000)
@@ -1362,7 +1363,7 @@ export class Game implements BotHost {
   /** Annihilation / Ace (match.cfg.mode "ANNIHILATION" /): the server's rounds (5153 / 5155) with no objectives. The round
    * ends by a side wiped out (Annihilation) or a kill (Ace); the round counter comes from 5153 / 5155 like Destroy's. */
   private initRounds(): void {
-    this.hud.setModeName(this.match.cfg.mode === "ACE" ? tOr("STR_HEADER_DO_TCH_DN_ACE_ATTACKER", "Ace Attacker") : tOr("STR_HEADER_MODE_ANNIHILATION", "Supressão"));
+    this.hud.setModeName(this.match.cfg.mode === "ACE" ? tOr("STR_HEADER_DO_TCH_DN_ACE_ATTACKER", "Ace Attacker") : tOr("STR_HEADER_MODE_ANNIHILATION", "Eliminate"));
     const r = (this.net as unknown as { room?: RoomClient | null }).room ?? null;
     if (!r || this.net.mode !== "net") return;
     const prev = { start: r.onRoundStart, end: r.onRoundEnd };
@@ -1391,8 +1392,8 @@ export class Game implements BotHost {
 
   private bombDebug(feet: THREE.Vector3): string {
     const b = this.bomb!, n = b.nearest(feet.toArray() as BombVec3);
-    const near = n ? `${"AB"[n.area]} ${n.dist.toFixed(1)} m (dy ${n.dy.toFixed(2)}; precisa < 2 m e |dy| < 0,2)` : "sem locais";
-    return `\nbomba: ${b.state} · time ${this.me.team} (atacam ${b.attackers}) · ${this.c4InHand() ? "C4 na mão" : "sem C4 na mão"} · área ${near}`;
+    const near = n ? `${"AB"[n.area]} ${n.dist.toFixed(1)} m (dy ${n.dy.toFixed(2)}; requires < 2 m and |dy| < 0.2)` : "no local data";
+    return `\nbomba: ${b.state} · time ${this.me.team} (atacam ${b.attackers}) · ${this.c4InHand() ? "C4 equipped" : "no C4 equipped"} · area ${near}`;
   }
 
   private c4InHand(): boolean {
@@ -1404,23 +1405,23 @@ export class Game implements BotHost {
     const b = () => this.bomb;
     const site = (area: number) => this.bombSites.find((s) => s.area === area);
     const A: { label: () => string; run: () => void }[] = [
-      { label: () => `Trocar de time (agora: ${this.me.team === 0 ? "TR / vermelho" : "CT / azul"})`, run: () => { this.me.team = (1 - this.me.team) as 0 | 1; this.spawnActor(this.me); } },
+      { label: () => `Switch team (current: ${this.me.team === 0 ? "TR / red" : "CT / blue"})`, run: () => { this.me.team = (1 - this.me.team) as 0 | 1; this.spawnActor(this.me); } },
       { label: () => "Vida cheia", run: () => { this.me.hp = this.me.maxHp; } },
-      { label: () => "Matar todos os bots", run: () => { for (const x of this.bots) if (x.alive) this.onDeath(x, this.me, "Debug", false); } },
+      { label: () => "Kill all bots", run: () => { for (const x of this.bots) if (x.alive) this.onDeath(x, this.me, "Debug", false); } },
     ];
     if (this.bomb) {
       const bm = () => b()!;
       A.push(
-        { label: () => "Ir ao ponto A da bomba", run: () => { const s = site(0); if (s) this.player.teleportFeet(new THREE.Vector3(s.pos[0] + 1, s.pos[1], s.pos[2]), this.player.yaw); } },
-        { label: () => "Ir ao ponto B da bomba", run: () => { const s = site(1); if (s) this.player.teleportFeet(new THREE.Vector3(s.pos[0] + 1, s.pos[1], s.pos[2]), this.player.yaw); } },
-        { label: () => "Plantar bomba no ponto A (instantâneo)", run: () => { const s = site(0); if (s && bm().state === "idle") this.devPlant(0, s.pos); } },
-        { label: () => "Plantar bomba no ponto B (instantâneo)", run: () => { const s = site(1); if (s && bm().state === "idle") this.devPlant(1, s.pos); } },
+        { label: () => "Go to bomb site A", run: () => { const s = site(0); if (s) this.player.teleportFeet(new THREE.Vector3(s.pos[0] + 1, s.pos[1], s.pos[2]), this.player.yaw); } },
+        { label: () => "Go to bomb site B", run: () => { const s = site(1); if (s) this.player.teleportFeet(new THREE.Vector3(s.pos[0] + 1, s.pos[1], s.pos[2]), this.player.yaw); } },
+        { label: () => "Plant bomb at site A (instant)", run: () => { const s = site(0); if (s && bm().state === "idle") this.devPlant(0, s.pos); } },
+        { label: () => "Plant bomb at site B (instant)", run: () => { const s = site(1); if (s && bm().state === "idle") this.devPlant(1, s.pos); } },
         { label: () => "Explodir a bomba agora", run: () => { if (bm().state !== "planted") return; if (this.bombRoom) this.bombRoom.devBomb(1); else bm().fuseLeft = 0.05; } },
-        { label: () => "Nova rodada (limpa a bomba)", run: () => { if (this.bombRoom) { this.bombRoom.devBomb(2); return; } bm().reset(0); this.bombVis?.clear(); this.match.beginRound(this.match.round + 1, this.match.score[0], this.match.score[1]); } },
-        { label: () => `Anéis dos pontos: ${this.bombRingsOn ? "ligados" : "desligados"}`, run: () => { this.bombRingsOn = !this.bombRingsOn; if (this.bombRingsOn) this.bombVis?.showSites(this.bombSites); else this.bombVis?.hideSites(); } },
+        { label: () => "New round (clear bomb)", run: () => { if (this.bombRoom) { this.bombRoom.devBomb(2); return; } bm().reset(0); this.bombVis?.clear(); this.match.beginRound(this.match.round + 1, this.match.score[0], this.match.score[1]); } },
+        { label: () => `Bomb site rings: ${this.bombRingsOn ? "ligados" : "desligados"}`, run: () => { this.bombRingsOn = !this.bombRingsOn; if (this.bombRingsOn) this.bombVis?.showSites(this.bombSites); else this.bombVis?.hideSites(); } },
       );
     }
-    this.devMenu = new DevMenu(this.bomb ? "Testes — Bomba" : "Testes", A.slice(0, 10), "Testes locais (online só afetam este cliente; depois só GM). O C4 fica no slot 6 (tecla 6) do TR.");
+    this.devMenu = new DevMenu(this.bomb ? "Testes — Bomba" : "Testes", A.slice(0, 10), "Local tests (online changes affect this client only; later restricted to GMs). C4 is in TR slot 6 (key 6).");
   }
 
   /** F2 plant: online it goes through the server (5156 -> ACK 5157 to everyone); offline it plants directly */
@@ -1482,7 +1483,7 @@ export class Game implements BotHost {
     this.bombVis?.plant(pos);
     this.match.paused = true; // the round clock stops: the fuse decides
     this.hud.killMark([KILL_MARKS.bombPlanted]);
-    this.missionNotice("STBL_IDX_BOMB_MISSION_ATTACH", "A bomba foi ativada");
+    this.missionNotice("STBL_IDX_BOMB_MISSION_ATTACH", "Explosives Deployed");
   }
 
   private onBombDefused(): void {
@@ -1491,7 +1492,7 @@ export class Game implements BotHost {
     this.bombVis?.defuse();
     this.match.paused = false;
     this.hud.killMark([KILL_MARKS.bombRemoved]);
-    this.missionNotice("STBL_IDX_BOMB_MISSION_DETTACH", "A bomba foi desarmada");
+    this.missionNotice("STBL_IDX_BOMB_MISSION_DETTACH", "Explosives Defused");
     if (!this.bombRoom) this.offlineRoundOver(this.match.defenders);
   }
 
@@ -1501,7 +1502,7 @@ export class Game implements BotHost {
     if (this.bomb.planted) this.bombBlast(this.bomb.planted.pos);
     this.bombVis?.explode();
     this.hud.killMark([KILL_MARKS.bombExploded]);
-    this.missionNotice("STBL_IDX_BOMB_MISSION_EXPLOSION", "O objetivo foi destruído"); // _ProcessEvent_RoundEnd 0x773d26 (BombFire)
+    this.missionNotice("STBL_IDX_BOMB_MISSION_EXPLOSION", "Target Detonated"); // _ProcessEvent_RoundEnd 0x773d26 (BombFire)
     if (!this.bombRoom) this.offlineRoundOver(1 - this.match.defenders);
   }
 
@@ -1681,13 +1682,13 @@ export class Game implements BotHost {
     if (inp.alive && !b.action && this.match.live && !this.finalOn) {
       if (b.canDefuse(inp)) {
         const k = (PB_KEYS.action[0] ?? "KeyE").replace(/^Key/, "");
-        hint = `${k} ${tOr("STBL_IDX_BOMB_MISSION_DETTACH_EXPLAIN", "Segure o botão para desarmar a bomba")}`;
-      } else if (b.state === "idle" && inp.hasC4 && b.siteAt(inp.pos) >= 0) hint = tOr("STBL_IDX_BOMB_MISSION_AREA", "Local de alvo para destruir.");
+        hint = `${k} ${tOr("STBL_IDX_BOMB_MISSION_DETTACH_EXPLAIN", "Push and hold the button\nto defuse the explosives.")}`;
+      } else if (b.state === "idle" && inp.hasC4 && b.siteAt(inp.pos) >= 0) hint = tOr("STBL_IDX_BOMB_MISSION_AREA", "This is the bomb site.  Switch to the explosives\nand hold the shooting key until the explosives are deployed.");
     }
     this.setBombHint(hint);
-    if (b.action === "defuse") this.missionNotice("STBL_IDX_BOMB_MISSION_DETTACH_ING", "A bomba está sendo desarmada", 3);
+    if (b.action === "defuse") this.missionNotice("STBL_IDX_BOMB_MISSION_DETTACH_ING", "Defusing the explosives.", 3);
     const wrongPlace = inp.alive && inp.hasC4 && b.state === "idle" && this.c4InHand() && this.input.locked && this.input.button(0) && b.siteAt(inp.pos) < 0;
-    if (wrongPlace && !this.noSiteShown) this.missionNotice("STBL_IDX_BOMB_MISSION_NONAREA", "A bomba só pode ser instalada no local apropriado");
+    if (wrongPlace && !this.noSiteShown) this.missionNotice("STBL_IDX_BOMB_MISSION_NONAREA", "Explosives can only be deployed at the bomb site.");
     this.noSiteShown = wrongPlace;
   }
 
@@ -1695,8 +1696,8 @@ export class Game implements BotHost {
     if (ph === "countdown") {
       // _ProcessEvent_RoundStart 0x769040, stage type 2 (Bomb): the attackers get, the defenders "Domine áreas-alvo" (3 s; [INFERIDO] side = 0x6da420 & 2)
       const attacker = this.me.team === this.bomb?.attackers;
-      if (attacker) this.missionNotice("STBL_IDX_MISSION_DESTROY_OBJECT", "Missão : Destrua áreas-alvo");
-      else this.missionNotice("STBL_IDX_MISSION_HOLDON_OBJECT", "Missão : Domine áreas-alvo");
+      if (attacker) this.missionNotice("STBL_IDX_MISSION_DESTROY_OBJECT", "Mission Objective: Destroy the target asset");
+      else this.missionNotice("STBL_IDX_MISSION_HOLDON_OBJECT", "Mission Objective: Defend the target asset");
       this.setBombHint(null);
       this.hud.clearFeed();
       this.drops?.clear();
@@ -1780,6 +1781,7 @@ export class Game implements BotHost {
     this.finalEndScreen = this.match.cfg.endScreen;
     this.match.cfg.endScreen = Infinity; // the offline match must not restart under the screen
     this.radio.menu.close();
+    this.escMenu?.hide(); // the match result owns the mouse, including when it arrives over the pause/options menu
     // the start / click-to-play blocker (#blocker) shows whenever the pointer is free: the lock may already be off here, and then
     // no pointerlockchange comes to hide it (the handler hides it only on that event)
     document.getElementById("blocker")?.classList.add("hidden");
@@ -1948,7 +1950,7 @@ export class Game implements BotHost {
         };
         this.remotes.set(s.id, r);
         // a player who starts the battle after us (the round-start burst is over): CStageBattle::_ProcessEvent_StartBattle 0x776680
-        if (this.time > 6) this.hud.notice(s.name, tOr("STBL_IDX_GAME_INTRODUCE_PLAYER", " Entrou no combate."));
+        if (this.time > 6) this.hud.notice(s.name, tOr("STBL_IDX_GAME_INTRODUCE_PLAYER", " joined the battle."));
         this.match.addActor(r);
         this.hitColliders.add(r);
       } else r.apply(s);
@@ -1956,7 +1958,7 @@ export class Game implements BotHost {
     });
     this.net.onRemoteLeave((id) => {
       const left = this.remotes.get(id);
-      if (left) this.hud.notice(left.name, tOr("STBL_IDX_GAME_BYE_PLAYER", " Deixou o combate.")); // ProcessGameContext 0x768fa5
+      if (left) this.hud.notice(left.name, tOr("STBL_IDX_GAME_BYE_PLAYER", " left the battle.")); // ProcessGameContext 0x768fa5
       this.remotes.get(id)?.dispose();
       this.remotes.delete(id);
       this.match.removeActor(id);
@@ -2226,6 +2228,7 @@ export class Game implements BotHost {
       aim: this.localAiming,
       cancelZoom: this.match.phase === "ended" || this.finalOn,
       reload: canShoot && pressed(inp, "reload"),
+      inspect: this.me.alive && !this.finalOn && inp.keyPressed("KeyI"),
       switchSlot: radioDigits || !this.me.alive || this.finalOn ? null : slotPressed(inp),
       // Q = last weapon (exe key map slot 19 -> stroke 0x20000 -> ProcessWeapon 0xa23639); QQ cancels a bolt / pump cycle
       // swapping is not tied to the live phase: the digit keys already worked in the countdown / round-end result; Q and the wheel
@@ -2501,11 +2504,11 @@ export class Game implements BotHost {
       const hud = this.obsHud = new ObserverHud();
       const key = (PB_KEYS.changeWeapon[0] ?? "KeyT").replace(/^Key/, "");
       hud.setHelp({
-        title: tOr("STR_TBL_INGAME_HUD_LIFE_COUNT_TEXT", "Sobreviventes:"),
-        next: tOr("STBL_IDX_OBSERVER_NEXT", "Próximo jogador: botão esquerdo do mouse"),
-        prev: tOr("STBL_IDX_OBSERVER_PREV", "Jogador anterior: botão direito do mouse"),
-        weapon: `${tOr("STBL_IDX_OBSERVER_WEAPON", "Trocar de arma:")} ${key}`, // "%s %s" with the weapon-change key (0x748312)
-        view: tOr("STBL_IDX_OBSERVER_VIEW", "Mudar visão: barra de espaço"),
+        title: tOr("STR_TBL_INGAME_HUD_LIFE_COUNT_TEXT", "Operators Active:"),
+        next: tOr("STBL_IDX_OBSERVER_NEXT", "Next Player: Left Mouse Button"),
+        prev: tOr("STBL_IDX_OBSERVER_PREV", "Previous Player: Mouse right button"),
+        weapon: `${tOr("STBL_IDX_OBSERVER_WEAPON", "Weapon Change:")} ${key}`, // "%s %s" with the weapon-change key (0x748312)
+        view: tOr("STBL_IDX_OBSERVER_VIEW", "View Change: Space Bar"),
       });
     }
     return this.obsHud;
@@ -2735,7 +2738,7 @@ export class Game implements BotHost {
     if (this.finalOn && this.finalData) {
       this.finalT += dt;
       if (this.finalT >= FINAL_SECONDS) this.endFinal();
-      else h.final({ ...this.finalData, mapName: MAP_LABELS[CurrentMap] ?? CurrentMap, modeName: this.bomb ? tOr("STR_HEADER_MODE_EXPLOSION", "Destruição") : tOr("STR_HEADER_MODE_TEAM_DEATH_MATCH", "Deathmatch"), tab: this.finalTab, leaveIn: FINAL_SECONDS - this.finalT });
+      else h.final({ ...this.finalData, mapName: MAP_LABELS[CurrentMap] ?? CurrentMap, modeName: this.bomb ? tOr("STR_HEADER_MODE_EXPLOSION", "Bomb") : tOr("STR_HEADER_MODE_TEAM_DEATH_MATCH", "Death Match"), tab: this.finalTab, leaveIn: FINAL_SECONDS - this.finalT });
     }
     h.helpImage(this.input.key("F1") && !this.obsHudMode); // F1 held (0x73f1a0); observing: obsUpdate draws it
     h.topBar(m.score, m.timeLeft(), m.cfg.mode !== "TDM" ? m.roundLimit : m.cfg.killLimit, m.round);
@@ -2746,12 +2749,12 @@ export class Game implements BotHost {
 
     const showSb = this.input.key("Tab") || m.phase === "ended";
     const leaderSlot = (this.net as unknown as { room?: { leaderSlot: number } | null } | null)?.room?.leaderSlot ?? -1;
-    h.scoreboard(showSb, m.rows().map((r) => { const rank = this.rankOfId(r.id), clanLogo = this.clanLogoOfId(r.id), nickColor = this.nickColorOfId(r.id); return { ...r, ...(leaderSlot >= 0 && r.id === `slot${leaderSlot}` ? { leader: true } : {}), ...(/^slot\d+$/.test(r.id) ? { slot: Number(r.id.slice(4)) } : {}), ...(rank !== undefined ? { rank } : {}), ...(clanLogo !== undefined ? { clanLogo } : {}), ...(nickColor !== undefined ? { nickColor } : {}) }; }), m.score, `Rodada ${m.round} · limite ${m.cfg.killLimit}`);
+    h.scoreboard(showSb, m.rows().map((r) => { const rank = this.rankOfId(r.id), clanLogo = this.clanLogoOfId(r.id), nickColor = this.nickColorOfId(r.id); return { ...r, ...(leaderSlot >= 0 && r.id === `slot${leaderSlot}` ? { leader: true } : {}), ...(/^slot\d+$/.test(r.id) ? { slot: Number(r.id.slice(4)) } : {}), ...(rank !== undefined ? { rank } : {}), ...(clanLogo !== undefined ? { clanLogo } : {}), ...(nickColor !== undefined ? { nickColor } : {}) }; }), m.score, `Round ${m.round} · limit ${m.cfg.killLimit}`);
 
     // Before the spawn: the exe's own notice (STR_TBL_INGAME_HUD_READY_FOR_GAME), as one line under the crosshair
     // [INFERIDO placement]. The old "3, 2, 1 / LUTE! / X VENCEU / Próxima rodada em" texts were ours, not PB's: the
     // end of the match is the Cross result window (pbHud/crossFinal.ts, forced up by hud.matchState).
-    if (m.phase === "countdown" && !this.spectating) h.banner("", tOr("STR_TBL_INGAME_HUD_READY_FOR_GAME", "Prepare-se, a partida já vai começar"));
+    if (m.phase === "countdown" && !this.spectating) h.banner("", tOr("STR_TBL_INGAME_HUD_READY_FOR_GAME", "Ready for game"));
     else h.banner("");
 
     // dead = killed and waiting to respawn; before the first spawn (me.alive still false, no respawnAt) the death HUDs

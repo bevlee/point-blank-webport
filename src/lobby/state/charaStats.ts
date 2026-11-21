@@ -22,7 +22,7 @@ export function setCharaStats(json: { Character?: Record<string, PefChara> } | n
   for (const c of Object.values(json?.Character ?? {})) {
     if (!c.ITEMID || !c.HP || !c.DamageRate) continue;
     const d = c.DamageRate;
-    table.set(c.ITEMID, { hp: c.HP, speed: c.Movement?.FrontMoveSpeed ?? 0, damage: { head: d.Head ?? 1, body: d.Body ?? 1, arm: d.Arm ?? 1, leg: d.Leg ?? 1 } });
+    table.set(c.ITEMID, { hp: 100, speed: c.Movement?.FrontMoveSpeed ?? 0, damage: { head: d.Head ?? 1, body: d.Body ?? 1, arm: d.Arm ?? 1, leg: d.Leg ?? 1 } });
   }
 }
 

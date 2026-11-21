@@ -109,8 +109,7 @@ export const DEFAULT_CONFIG: MatchConfig = {
 const PART_RATE_MAX = 1.2;
 /** bullet damage coupon 1600078, +10 % (src/game/loadout.ts BATTLE_COUPONS, [INFERIDO] there) */
 const DAMAGE_UP_MAX = 0.1;
-/** CalcHeadShotDamage 0x7fbf20 caps a human head hit at 255 (src/game/damage.ts HEAD_HIT_DAMAGE) */
-const HEAD_DAMAGE_MAX = 255;
+const HEADSHOT_MULTIPLIER = 1.5;
 /** best three titles' Fire_Speed (DesignationValue.pef: -0.004, -0.003, -0.003 s) and GetFireDelay's floor (0x616020) */
 const FIRE_SPEED_TITLE_MAX = 0.01;
 const FIRE_DELAY_MIN = 0.06;
@@ -1312,7 +1311,7 @@ export class MatchCore {
 
   /** AllUtils.ValidateHitData with antiScript on, for the resolved item `w`. Deviations, each because a web hit
    * would fail the original: the cap is never below the honest maximum, max(pef / blade base) x PART_RATE_MAX x
-   * (1 + DAMAGE_UP_MAX) (Cheytac: XML 95, pef 173); a head hit is capped at HEAD_DAMAGE_MAX (unchecked in the original, and
+   * (1 + DAMAGE_UP_MAX) (Cheytac: XML 95, pef 173); a head hit is capped at 1.5x the item damage (unchecked in the original, and
    * not on a map object, which takes the damage as is); a record that breaks a prop may carry its blast (`blast`). */
   private validateHitData(raw: number, hit: HitDataInfo, st: ItemStat, w: number, blast: number): number | null {
     const cls = itemClassified(idStatics(w, 2));
@@ -1323,7 +1322,7 @@ export class MatchCore {
         const num2 = cls === 3 ? st.damage : st.damage + Math.trunc((st.damage * 30) / 100);
         const honest = Math.trunc((st.damageMax ?? st.damage) * PART_RATE_MAX * (1 + DAMAGE_UP_MAX) + 0.5);
         if (raw > Math.max(num2, honest, blast)) return null;
-      } else if (raw > HEAD_DAMAGE_MAX) return null;
+      } else if (raw > Math.round((st.damageMax ?? st.damage) * HEADSHOT_MULTIPLIER)) return null;
       return raw;
     }
     return null;
@@ -1577,8 +1576,7 @@ export class MatchCore {
       if (charaId === -1) player.immortal = true;
       else {
         player.immortal = false;
-        const baseHp = this.data.charaHp[charaId] ?? 100;
-        player.maxLife = baseHp + Math.trunc((baseHp * (s.hpBonus ?? 0)) / 100);
+        player.maxLife = 100;
         player.resetLife();
       }
     }

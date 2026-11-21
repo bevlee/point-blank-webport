@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pb
+  namespace: pb
+  labels: {app: pb}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels: {app: pb}
+  template:
+    metadata:
+      labels: {app: pb}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: backend
+          image: docker.io/bevdev1/pb
+          ports: [{name: backend, containerPort: 8090}]
+          env:
+            - name: PB_DB_URL
+              valueFrom:
+                secretKeyRef: {name: pb-db, key: url}
+            - {name: PB_WEB_ORIGINS, value: 'https://pb.bevsoft.com'}
+            - {name: PB_TRUST_PROXY, value: '1'}
+            - {name: PB_IDLE_KICK_MIN, value: '0'}
+          envFrom:
+            - secretRef: {name: pb-turn}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 768Mi}
+          startupProbe:
+            httpGet: {path: /ready, port: backend}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: backend}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: backend}
+            periodSeconds: 15
+          volumeMounts:
+            - {name: backend-tmp, mountPath: /tmp}
+        - name: frontend
+          image: docker.io/bevdev1/pb
+          command: [nginx, -c, /app/deploy/kubernetes-nginx.conf, -g, 'daemon off;']
+          ports: [{name: http, containerPort: 8080}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          readinessProbe:
+            httpGet: {path: /assets/maps/index.json, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 15
+          volumeMounts:
+            - {name: frontend-tmp, mountPath: /tmp}
+            - {name: assets, mountPath: /game-assets, readOnly: true}
+      volumes:
+        - name: backend-tmp
+          emptyDir: {sizeLimit: 64Mi}
+        - name: frontend-tmp
+          emptyDir: {sizeLimit: 64Mi}
+        - name: assets
+          persistentVolumeClaim: {claimName: pb-assets}

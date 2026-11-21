@@ -24,22 +24,23 @@ import {
 /** control -> STR of cross-ui-map.json (ivInvenWin / ivEquipmentWin / ivCharacterWin, confidence str:exe); the
  * equipment row keys are set by 0x8431d0 (STR_INVEN_PRIMARY..SPECIAL_WEAPON on this+0xac..0xdc) */
 const TEXTS: Texts = {
-  ivEquipmentCaption: ["STR_INVEN_USED_EQUIP", "Equipamento usado"], ivCharacterCaption: ["STR_INVEN_USED_CHARA", "Personagem em uso"],
-  ivRedTypeKey: ["STR_INVEN_RED_CHARA", "Personagem rebelde"], ivBlueTypeKey: ["STR_INVEN_BLUE_CHARA", "Personagem da OTP"],
-  ivHeadKey: ["STR_INVEN_HEAD", "Cabeça"], ivBeretKey: ["STR_INVEN_BERET", "Boina"],
-  ivInvenCaption: ["STR_INVEN_INVENTORY", "Inventário"],
-  ivAllWeapon: ["STR_INVEN_VIEW_ALL", "Ver tudo"], ivPrimaryWeapon: ["STR_INVEN_PRIMARY_WEAPON", "Arma primária"], ivSecondaryWeapon: ["STR_INVEN_SECONDARY_WEAPON", "Arma secundária"],
-  ivMeleeWeapon: ["STR_INVEN_MELEE_WEAPON", "Arma branca"], ivThrowingWeapon: ["STR_INVEN_THROWING_WEAPON", "Granada"], ivItemWeapon: ["STR_INVEN_SPECIAL_WEAPON", "Arma especial"],
-  ivPrimaryKey: ["STR_INVEN_PRIMARY_WEAPON", "Arma primária"], ivSecondaryKey: ["STR_INVEN_SECONDARY_WEAPON", "Arma secundária"], ivMeleeKey: ["STR_INVEN_MELEE_WEAPON", "Arma branca"],
-  ivThrowingKey: ["STR_INVEN_THROWING_WEAPON", "Granada"], ivItemKey: ["STR_INVEN_SPECIAL_WEAPON", "Arma especial"],
-  ivAllCharacter: ["STR_INVEN_VIEW_ALL", "Ver tudo"], ivTypeCharacter: ["STR_INVEN_CHRACTER", "Personagem"], ivHeadCharacter: ["STR_INVEN_HEAD", "Cabeça"], ivBeretCharacter: ["STR_INVEN_BERET", "Boina"],
-  ivItemGroupAll: ["STR_INVEN_VIEW_ALL", "Ver tudo"],
-  ivItemGroupMaintenance: ["STR_INVEN_MAINTENANCE_ITEM", "Durab."], ivItemGroupExpendable: ["STR_INVEN_EXPENDABLES", "Consumível"],
-  ivCharacterTermKey: ["STR_INVEN_REMAIN_TERM", "Tempo restante"], ivItemDetailTermKey: ["STR_INVEN_REMAIN_TERM", "Tempo restante"],
-  ...statTexts("iv", "STR_INVEN_BULLETS", "STR_INVEN_WEAPON_RANGE"),
-  ivInvenWeaponInfoDetail: ["STR_INVEN_DETAIL_INFO", "Detalhes"], ivCharacterDetail: ["STR_INVEN_DETAIL_INFO", "Detalhes"],
+  ivEquipmentCaption: ["STR_INVEN_USED_EQUIP", "Equipment in use"], ivCharacterCaption: ["STR_INVEN_USED_CHARA", "Character in use"],
+  ivRedTypeKey: ["STR_INVEN_RED_CHARA", "Red Team character"], ivBlueTypeKey: ["STR_INVEN_BLUE_CHARA", "Blue Team character"],
+  ivHeadKey: ["STR_INVEN_HEAD", "Head"], ivBeretKey: ["STR_INVEN_BERET", "Beret"],
+  ivInvenCaption: ["STR_INVEN_INVENTORY", "Inventory"],
+  ivItemDelete: ["STR_INVEN_DELETE", "Delete"],
+  ivAllWeapon: ["STR_INVEN_VIEW_ALL", "View all"], ivPrimaryWeapon: ["STR_INVEN_PRIMARY_WEAPON", "Main"], ivSecondaryWeapon: ["STR_INVEN_SECONDARY_WEAPON", "Secondary"],
+  ivMeleeWeapon: ["STR_INVEN_MELEE_WEAPON", "Melee"], ivThrowingWeapon: ["STR_INVEN_THROWING_WEAPON", "Explosive"], ivItemWeapon: ["STR_INVEN_SPECIAL_WEAPON", "Special"],
+  ivPrimaryKey: ["STR_INVEN_PRIMARY_WEAPON", "Main"], ivSecondaryKey: ["STR_INVEN_SECONDARY_WEAPON", "Secondary"], ivMeleeKey: ["STR_INVEN_MELEE_WEAPON", "Melee"],
+  ivThrowingKey: ["STR_INVEN_THROWING_WEAPON", "Explosive"], ivItemKey: ["STR_INVEN_SPECIAL_WEAPON", "Special"],
+  ivAllCharacter: ["STR_INVEN_VIEW_ALL", "View all"], ivTypeCharacter: ["STR_INVEN_CHRACTER", "Character"], ivHeadCharacter: ["STR_INVEN_HEAD", "Head"], ivBeretCharacter: ["STR_INVEN_BERET", "Beret"],
+  ivItemGroupAll: ["STR_INVEN_VIEW_ALL", "View all"],
+  ivItemGroupMaintenance: ["STR_INVEN_MAINTENANCE_ITEM", "Timed"], ivItemGroupExpendable: ["STR_INVEN_EXPENDABLES", "Consumable"],
+  ivCharacterTermKey: ["STR_INVEN_REMAIN_TERM", "Time left"], ivItemDetailTermKey: ["STR_INVEN_REMAIN_TERM", "Time left"],
+  ...statTexts("iv", "STR_INVEN_BULLETS", "Ammo"),
+  ivInvenWeaponInfoDetail: ["STR_INVEN_DETAIL_INFO", "View Info"], ivCharacterDetail: ["STR_INVEN_DETAIL_INFO", "View Info"],
   // ivInvenWeaponRepair's map entry carries several STR (the exe relabels it): Reparar is the one the chara button uses
-  ivInvenWeaponRepair: ["STR_INVEN_DO_REPAIR", "Reparar"], ivInvenCharaRepair: ["STR_INVEN_DO_REPAIR", "Reparar"],
+  ivInvenWeaponRepair: ["STR_INVEN_DO_REPAIR", "Repair"], ivInvenCharaRepair: ["STR_INVEN_DO_REPAIR", "Repair"],
 };
 
 /** controls with no web equivalent: sale marks, extensions, auth (key items), the character remove button (0x849521 enables
@@ -198,7 +199,7 @@ export class InvenPage {
   private askUse(it: InventoryItem): void {
     const c = this.ctx.ctl, str = this.ctx.str;
     c.msg = {
-      text: `${str("STR_POPUP_USE_ITEM", "Item usado:")} ${itemName(it.itemId).name}\n${str("STR_POPUP_ITEM_ATTRIBUTE", "Atributo:")} ${termText(itemTerm(it))}\n\n${str("STR_POPUP_Q_MESSAGE_WANT_USE_ITEM", "Deseja usar o item?")}`,
+      text: `${str("STR_POPUP_USE_ITEM", "Use Item:")} ${itemName(it.itemId).name}\n${str("STR_POPUP_ITEM_ATTRIBUTE", "Attributes:")} ${termText(itemTerm(it))}\n\n${str("STR_POPUP_Q_MESSAGE_WANT_USE_ITEM", "Do you want to use the item?")}`,
       onOk: () => { c.menu.confirming = true; void c.equip(); },
       onCancel: () => {},
     };
@@ -209,11 +210,11 @@ export class InvenPage {
    * asks STR_INVEN_MESSAGE_DELETE_ITEM, then deleteItem. The popup's {col} markup is dropped (the message box is plain text) */
   private askDelete(it: InventoryItem): void {
     const c = this.ctx.ctl, str = this.ctx.str;
-    const warning = str("STR_POPUP_Q_MESSAGE_WARNING_DELETE_ITEM", "Itens excluídos não poderão ser recuperados!").replace(/\{[^}]*\}/g, "");
+    const warning = str("STR_POPUP_Q_MESSAGE_WARNING_DELETE_ITEM", "Deleted items cannot be recovered!").replace(/\{[^}]*\}/g, "");
     c.msg = {
-      text: `${str("STR_POPUP_DELETE_ITEM", "Excluir Item")}: ${itemName(it.itemId).name}\n${str("STR_POPUP_TERM_DELETE_ITEM", "Restante")}: ${termText(itemTerm(it))}\n\n${str("STR_POPUP_Q_MESSAGE_WANT_DELETE_ITEM", "Tem certeza que deseja excluir?")}\n${warning}`,
+      text: `${str("STR_POPUP_DELETE_ITEM", "Deleted Item:").replace(/:\s*$/, "")}: ${itemName(it.itemId).name}\n${str("STR_POPUP_TERM_DELETE_ITEM", "Duration")}: ${termText(itemTerm(it))}\n\n${str("STR_POPUP_Q_MESSAGE_WANT_DELETE_ITEM", "Would you like to delete this item?")}\n${warning}`,
       onOk: () => {
-        c.msg = { text: str("STR_INVEN_MESSAGE_DELETE_ITEM", "Deseja excluir o item?"), onOk: () => void this.deleteItem(it.objectId), onCancel: () => {} };
+        c.msg = { text: str("STR_INVEN_MESSAGE_DELETE_ITEM", "If you delete this item all item effects will be removed.\nAre you sure you want to delete this item?"), onOk: () => void this.deleteItem(it.objectId), onCancel: () => {} };
         c.draw();
       },
       onCancel: () => {},
@@ -225,16 +226,16 @@ export class InvenPage {
    * listener drops the item from the store on the ack. Result text: STR_INVEN_DELETE_ITEM_SUCCESS / _FAIL */
   private async deleteItem(objectId: number): Promise<void> {
     const c = this.ctx.ctl, str = this.ctx.str, conn = c.session?.connection;
-    if (!conn || !conn.isOpen) { c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "Falha ao excluir o item\npor problemas na rede."), true); return; }
+    if (!conn || !conn.isOpen) { c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "A network error has occurred.\nThe item was not deleted."), true); return; }
     c.busy = true; c.draw();
     try {
       const ack = conn.waitFor(GameMetaOp.SHOP_DELETE_ITEM_ACK, 5000);
       conn.send(1055, new PacketWriter(4).writeD(objectId >>> 0));
       const d = parseDeleteItem(await ack);
-      if (d.ok) { c.menu.selected = null; c.say(str("STR_INVEN_DELETE_ITEM_SUCCESS", "Os itens foram removidos.")); }
-      else c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "Falha ao excluir o item\npor problemas na rede."), true);
+      if (d.ok) { c.menu.selected = null; c.say(str("STR_INVEN_DELETE_ITEM_SUCCESS", "Item deleted.")); }
+      else c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "A network error has occurred.\nThe item was not deleted."), true);
     } catch {
-      c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "Falha ao excluir o item\npor problemas na rede."), true);
+      c.say(str("STR_INVEN_DELETE_ITEM_FAIL", "A network error has occurred.\nThe item was not deleted."), true);
     } finally {
       c.busy = false; c.draw();
     }

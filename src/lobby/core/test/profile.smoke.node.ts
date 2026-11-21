@@ -32,7 +32,7 @@ const { EMPTY_CHROME } = await import("../model.ts");
 const { confirmMode } = await import("../profile.ts");
 const { TITLES, TREE_NODES, EFFECTS } = await import("../titleData.ts");
 const L = await import("../titleLogic.ts");
-const { hasHangul } = await import("../../screens/strings.ts");
+const { hasHangul, cleanLabel } = await import("../../screens/strings.ts");
 const { setItemNameTable, itemName } = await import("../../state/itemNames.ts");
 
 setItemNameTable(JSON.parse(readFileSync(new URL("../../state/data/itemNames.json", import.meta.url), "utf8")));
@@ -109,14 +109,15 @@ await (await import("../../ui/i18n.ts")).loadStrings();
   // effect ids = the exe's DESIGNATION_ID table (CDesignationValueSet 0x4d1a20 values / 0x4d29d0 texts), not pef registry order
   const blaster = L.titleDef(40)!; // Set_14: plus id 56 = Throw_Speed_Plus_1 / STR_HEADER_THROWING_PLAS_1
   check("effect id -> pef key + string (exe table)", EFFECTS[blaster.plus[0]].join() === "THROWING_PLAS_1,Throw_Speed_Plus_1" && EFFECTS[71].join() === "WEAPON_REACTION_CONTROL_PLUS_1,Weapon_Reaction_Control_Plus_1" && EFFECTS[161][1] === "DPD_Rate_Minus_1" && EFFECTS[171][0] === "DESIGNATION_GET_SLOT2");
-  check("effect texts come from STR_HEADER_*", L.effectText(51) === "Aumento de taxa de acerto de disparo Lv1" && L.effectText(86) === "Redução de movimento Lv1" && L.effectText(71) === "Aumento de precisão Lv1" && L.effectText(0) === "");
+  const strings = JSON.parse(readFileSync(PUBLIC + "/assets/ui/cross/strings.json", "utf8"));
+  check("effect texts come from the active client's STR_HEADER_*", [51, 86, 71].every(id => !!L.effectText(id) && L.effectText(id) === cleanLabel(strings[`STR_HEADER_${EFFECTS[id][0]}`])) && L.effectText(0) === "");
   // every title: name, English name, explanation, requirements and the three effect rows, none empty
   const nameOf = (id: number) => itemName(id).name;
   const empties: string[] = [];
   for (const t of TITLES) {
     const r = L.effectRows(t, nameOf);
     const fields: Record<string, string> = { name: L.titleName(t), name2: L.titleName2(t), explain: L.titleExplain(t), rank: L.rankName(t.rank), plus: r.plus, minus: r.minus, add: r.add };
-    for (const [k, v] of Object.entries(fields)) if (!v.trim() || v.startsWith("#") || /Non String/.test(v)) empties.push(`${t.id}.${k}`);
+    for (const [k, v] of Object.entries(fields)) if (!v.trim() || v.startsWith("#") || /Non String/.test(v)) empties.push(`${t.id}.${k}=${JSON.stringify(v)}`);
     if (t.req1 && !L.titleDef(t.req1)) empties.push(`${t.id}.req1`);
     if (t.weapon.length && !r.add.includes(nameOf(L.weaponItemId(t.weapon[0][0], t.weapon[0][1])))) empties.push(`${t.id}.weapon`);
     for (const id of [...t.plus, ...t.minus]) if (!L.effectText(id)) empties.push(`${t.id}.effect${id}`);
@@ -125,7 +126,8 @@ await (await import("../../ui/i18n.ts")).loadStrings();
   check("44 titles: no empty detail field (name, English name, explanation, rank, + / - / extra rows, weapons)", empties.length === 0, empties.join(" "));
   const gunner = L.effectRows(L.titleDef(30)!, nameOf), assail = L.effectRows(L.titleDef(24)!, nameOf);
   check("rows: Gunner plus / minus effect texts, no minus -> Indisponível", gunner.plus === L.effectText(51) && gunner.minus === L.effectText(86) && L.effectRows(L.titleDef(1)!, nameOf).minus === L.TS.none);
-  check("weapon row is independent of the extra effect id (title 24: AddEffect none, weapon [4,13])", L.titleDef(24)!.add.length === 0 && assail.add.startsWith("Permissão de compra de ") && assail.add !== L.effectRows(L.titleDef(9)!, nameOf).add);
+  const unlock = cleanLabel(strings.STR_HEADER_AUTHORITY_WEAPON.replace("%s", nameOf(L.weaponItemId(4, 13))));
+  check("weapon row is independent of the extra effect id (title 24: AddEffect none, weapon [4,13])", L.titleDef(24)!.add.length === 0 && assail.add === unlock && assail.add !== L.effectRows(L.titleDef(9)!, nameOf).add);
 }
 
 // ---- controller: INFO button -> profile page -> pick -> confirm -> popup -> request -> state
@@ -194,6 +196,13 @@ await (await import("../../ui/i18n.ts")).loadStrings();
   check("Voltar leaves the profile for the lobby", (ctl.page as string) === "lobby");
   ctl.click("myinfo", "i3UIButton");
   check("the INFO button opens it again with a clean pick", (ctl.page as string) === "profile" && ctl.profile.selected === 0 && ctl.profile.slotSel === -1);
+  for (const page of ["inventory", "shop"] as const) {
+    ctl.msg = null;
+    ctl.page = page;
+    ctl.menuFrom = "room";
+    ctl.click("myinfo", "i3UIButton");
+    check(`Profile opens from ${page} and preserves room return`, (ctl.page as string) === "profile" && ctl.menuFrom === "room");
+  }
   tc.dispose();
 }
 

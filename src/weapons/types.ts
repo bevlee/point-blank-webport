@@ -238,6 +238,8 @@ export interface WeaponContext {
 }
 
 export interface WeaponInput {
+  /** I: inspect an opt-in mastery camo. */
+  inspect?: boolean;
   /** LMB held */
   fire: boolean;
   /** RMB held (zoom/scope for guns, heavy stab for knife) */

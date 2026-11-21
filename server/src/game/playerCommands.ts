@@ -43,7 +43,7 @@ export type TargetResult = { acc: Account } | { err: string };
 /** Unique prefix inside the room, then exact among the online players (see the header). roomOnly: only the room counts. */
 export function resolveNick(p: Account, query: string, roomOnly = false): TargetResult {
   const q = fold(query);
-  if (!q) return { err: "Informe o apelido do jogador." };
+  if (!q) return { err: "Enter the player's nickname." };
   const room = roomOf(p);
   if (room) {
     // a hidden GM observer is not a room mate for a normal account: no prefix match, no name in the "ambiguous" list
@@ -52,40 +52,40 @@ export function resolveNick(p: Account, query: string, roomOnly = false): Target
     if (exact.length === 1) return { acc: exact[0] };
     const pref = mates.filter((a) => fold(a.nickname).startsWith(q));
     if (pref.length === 1) return { acc: pref[0] };
-    if (pref.length > 1) return { err: `Apelido ambíguo: ${pref.slice(0, 5).map((a) => a.nickname).join(", ")}${pref.length > 5 ? "..." : ""}. Digite mais letras.` };
+    if (pref.length > 1) return { err: `Ambiguous nickname: ${pref.slice(0, 5).map((a) => a.nickname).join(", ")}${pref.length > 5 ? "..." : ""}. Enter more characters.` };
   }
   if (!roomOnly) {
     const a = [...social.online.values()].find((x) => x.isOnline && fold(x.nickname) === q);
     if (a) return { acc: a };
   }
-  return { err: `Jogador '${query}' não encontrado${roomOnly ? " na sala" : ""}.` };
+  return { err: `Player '${query}' not found${roomOnly ? " in the room" : ""}.` };
 }
 
 const KICK_TEXT = (): Record<number, string> => ({
-  [KICK_ERR.fail]: "Não foi possível iniciar a votação.",
-  [KICK_ERR.active]: "Já há uma votação em andamento.",
-  [KICK_ERR.cooldown]: "Aguarde 1 minuto entre votações.",
-  [KICK_ERR.rank]: `Você precisa ser patente ${config.voteMinRank} ou mais para votar uma expulsão.`,
-  [KICK_ERR.voted]: "Você já votou.",
-  [KICK_ERR.fewPlayers]: "É preciso ter pelo menos 4 jogadores humanos na partida.",
-  [KICK_ERR.protectedTarget]: "Esse jogador não pode ser expulso por votação.",
+  [KICK_ERR.fail]: "Could not start the vote.",
+  [KICK_ERR.active]: "A vote is already in progress.",
+  [KICK_ERR.cooldown]: "Wait 1 minute between votes.",
+  [KICK_ERR.rank]: `You must hold rank ${config.voteMinRank} or more to start a kick vote.`,
+  [KICK_ERR.voted]: "You have already voted.",
+  [KICK_ERR.fewPlayers]: "At least 4 human players are required in the match.",
+  [KICK_ERR.protectedTarget]: "This player cannot be kicked by vote.",
 });
 const LEADER_TEXT = (): Record<number, string> => ({
-  [LEADER_ERR.fail]: "Não foi possível iniciar a votação.",
-  [LEADER_ERR.active]: "Já há uma votação em andamento.",
-  [LEADER_ERR.cooldown]: "Aguarde 2 minutos entre votações de líder.",
-  [LEADER_ERR.rank]: `Você precisa ser patente ${config.voteMinRank} ou mais para votar um novo líder.`,
-  [LEADER_ERR.voted]: "Você já votou.",
-  [LEADER_ERR.fewPlayers]: `É preciso ter pelo menos ${LEADER_MIN_HUMANS} jogadores humanos na partida.`,
-  [LEADER_ERR.badTarget]: "Esse jogador não pode ser o novo líder.",
-  [LEADER_ERR.highPing]: "Esse jogador tem ping alto demais para ser líder.",
-  [LEADER_ERR.rejected]: "Votação reprovada.",
+  [LEADER_ERR.fail]: "Could not start the vote.",
+  [LEADER_ERR.active]: "A vote is already in progress.",
+  [LEADER_ERR.cooldown]: "Wait 2 minutes between host votes.",
+  [LEADER_ERR.rank]: `You must hold rank ${config.voteMinRank} or more to vote for a new host.`,
+  [LEADER_ERR.voted]: "You have already voted.",
+  [LEADER_ERR.fewPlayers]: `Requires at least ${LEADER_MIN_HUMANS} human players in the match.`,
+  [LEADER_ERR.badTarget]: "This player cannot become the new host.",
+  [LEADER_ERR.highPing]: "This player's ping is too high to become host.",
+  [LEADER_ERR.rejected]: "Vote rejected.",
 });
 const REPORT_TEXT = (): Record<number, string> => ({
-  [REPORT_ERR.noTickets]: `Sem tickets de denúncia (${config.reportTickets} a cada 24 h).`,
-  [REPORT_ERR.rank]: `Você precisa ser patente ${config.reportMinRank} ou mais para denunciar.`,
-  [REPORT_ERR.duplicate]: "Você já denunciou esse jogador.",
-  [REPORT_ERR.fail]: "Não foi possível enviar a denúncia.",
+  [REPORT_ERR.noTickets]: `No report tickets (${config.reportTickets} every 24 h).`,
+  [REPORT_ERR.rank]: `You must hold rank ${config.reportMinRank} or higher to submit a report.`,
+  [REPORT_ERR.duplicate]: "You have already reported this player.",
+  [REPORT_ERR.fail]: "Could not submit the report.",
 });
 
 /** "hack" / "chat" -> report kinds + the vote motive (0 chat, 1 hack [INFERIDO]); null when it is neither. */
@@ -109,90 +109,90 @@ export async function playerCommands(p: Account, text: string): Promise<boolean>
     case "ajuda": case "help": for (const l of HELP) say(l); return true;
     case "bug": say(BUG_POPUP_LINE); return true;
     case "w": {
-      if (a.length < 2) { say("Uso: /w <nick> <texto>"); return true; }
+      if (a.length < 2) { say("Usage: /w <nick> <text>"); return true; }
       const t = cleanChatText(cmd.rest(0));
-      if (!t) { say("Uso: /w <nick> <texto>"); return true; }
-      if (t.length > 60) { say("Texto longo demais (máximo 60 caracteres)."); return true; }
-      if (await banState(p)) { say("Você está silenciado."); return true; }
+      if (!t) { say("Usage: /w <nick> <text>"); return true; }
+      if (t.length > 60) { say("Text too long (maximum 60 characters)."); return true; }
+      if (await banState(p)) { say("You are muted."); return true; }
       const r = resolveNick(p, a[0].value);
       if ("err" in r) { say(r.err); return true; }
-      if (r.acc.playerId === p.playerId) { say("Você não pode sussurrar para si mesmo."); return true; }
-      say(sendWhisper(p, r.acc, t) ? `Sussurro para ${r.acc.nickname}: ${t}` : `${r.acc.nickname} não está disponível.`);
+      if (r.acc.playerId === p.playerId) { say("You cannot whisper to yourself."); return true; }
+      say(sendWhisper(p, r.acc, t) ? `Whisper to ${r.acc.nickname}: ${t}` : `${r.acc.nickname} is unavailable.`);
       return true;
     }
     case "r": {
       const t = cleanChatText(cmd.rest(-1));
-      if (!t) { say("Uso: /r <texto>"); return true; }
-      if (t.length > 60) { say("Texto longo demais (máximo 60 caracteres)."); return true; }
+      if (!t) { say("Usage: /r <text>"); return true; }
+      if (t.length > 60) { say("Text too long (maximum 60 characters)."); return true; }
       const nick = lastWhisperPartner(p);
-      if (!nick) { say("Ninguém para responder."); return true; }
-      if (await banState(p)) { say("Você está silenciado."); return true; }
+      if (!nick) { say("Nobody to reply to."); return true; }
+      if (await banState(p)) { say("You are muted."); return true; }
       const to = [...social.online.values()].find((x) => x.nickname === nick) ?? null;
-      say(sendWhisper(p, to, t) ? `Sussurro para ${nick}: ${t}` : `${nick} não está disponível.`);
+      say(sendWhisper(p, to, t) ? `Whisper to ${nick}: ${t}` : `${nick} is unavailable.`);
       return true;
     }
     case "ping": {
-      if (!room || room.state < RoomState.BATTLE_READY) { say("O /ping só funciona durante a partida."); return true; }
+      if (!room || room.state < RoomState.BATTLE_READY) { say("/ping is only available during a match."); return true; }
       const host = room.getSlot(room.leader), hostAcc = host && host.playerId > 0n ? room.svc.getAccount(host.playerId) : null;
       const me = pingOf(room, p.slotId), h = pingOf(room, room.leader);
-      say(`Host: ${hostAcc?.nickname ?? "?"} (slot ${room.leader + 1}${room.leader === p.slotId ? ", você" : ""}). Ping: você ${me === 255 ? "?" : me}, host ${h === 255 ? "?" : h}.`);
+      say(`Host: ${hostAcc?.nickname ?? "?"} (slot ${room.leader + 1}${room.leader === p.slotId ? ", you" : ""}). Ping: you ${me === 255 ? "?" : me}, host ${h === 255 ? "?" : h}.`);
       return true;
     }
     case "denunciar": {
-      if (a.length < 2) { say("Uso: /denunciar <nick> <hack|chat> [detalhe]"); return true; }
+      if (a.length < 2) { say("Usage: /denunciar <nick> <hack|chat> [details]"); return true; }
       const k = parseKind(a[1].value);
-      if (!k) { say("Tipo inválido: use hack ou chat."); return true; }
+      if (!k) { say("Invalid type: use hack or chat."); return true; }
       const r = resolveNick(p, a[0].value);
       if ("err" in r) { say(r.err); return true; }
       const res = await submitReport(p, r.acc, k.kinds, cmd.rest(1));
       if (res.err !== 0) say(REPORT_TEXT()[res.err] ?? REPORT_TEXT()[REPORT_ERR.fail]);
-      else say(res.ignored ? "Denúncia ignorada: não é possível denunciar a si mesmo nem um GM." : `Denúncia enviada contra ${r.acc.nickname}. Tickets restantes: ${res.left}.`);
+      else say(res.ignored ? "Report ignored: you cannot report yourself or a GM." : `Report submitted against ${r.acc.nickname}. Reports remaining: ${res.left}.`);
       return true;
     }
     case "votekick": {
-      if (!room || room.state !== RoomState.BATTLE) { say("A votação de expulsão só funciona durante a partida."); return true; }
-      if (a.length < 2) { say("Uso: /votekick <nick> <hack|chat>"); return true; }
+      if (!room || room.state !== RoomState.BATTLE) { say("Kick voting is only available during a match."); return true; }
+      if (a.length < 2) { say("Usage: /votekick <nick> <hack|chat>"); return true; }
       const k = parseKind(a[1].value);
-      if (!k) { say("Motivo inválido: use hack ou chat."); return true; }
+      if (!k) { say("Invalid reason: use hack or chat."); return true; }
       const r = resolveNick(p, a[0].value, true);
       if ("err" in r) { say(r.err); return true; }
       let acked = false;
       const err = startKickVote(p, r.acc.slotId, k.motive, () => { acked = true; client?.session.send(rp.errAck(5191, 0)); });
       if (!acked) client?.session.send(rp.errAck(5191, err));
-      say(err === 0 ? `Votação de expulsão iniciada contra ${r.acc.nickname}. Vote com /sim ou /nao.` : KICK_TEXT()[err] ?? KICK_TEXT()[KICK_ERR.fail]);
+      say(err === 0 ? `Kick vote started against ${r.acc.nickname}. Vote with /sim or /nao.` : KICK_TEXT()[err] ?? KICK_TEXT()[KICK_ERR.fail]);
       return true;
     }
     case "votelider": {
-      if (!room) { say("Você precisa estar em uma sala."); return true; }
+      if (!room) { say("You must be in a room."); return true; }
       if (room.state === RoomState.READY) {
         // out of battle: 3611 REQUEST_MAIN, a vote to take the leadership for yourself
         const r = a.length ? resolveNick(p, a[0].value, true) : { acc: p };
         if ("err" in r) { say(r.err); return true; }
-        if (r.acc.playerId !== p.playerId) { say("Na sala, /votelider pede a liderança para você mesmo."); return true; }
-        if (room.leader === p.slotId) { say("Você já é o líder."); return true; }
+        if (r.acc.playerId !== p.playerId) { say("In a room, /votelider requests host status for yourself."); return true; }
+        if (room.leader === p.slotId) { say("You are already the host."); return true; }
         if (client) handleRequestMain(client);
-        say("Pedido de liderança enviado à sala.");
+        say("Host request sent to the room.");
         return true;
       }
-      if (room.state !== RoomState.BATTLE) { say("A votação de líder só funciona na sala ou durante a partida."); return true; }
+      if (room.state !== RoomState.BATTLE) { say("Host voting is only available in a room or during a match."); return true; }
       let slot = 255;
       if (a.length) { const r = resolveNick(p, a[0].value, true); if ("err" in r) { say(r.err); return true; } slot = r.acc.slotId; }
       let acked = false;
       const err = startLeaderVote(p, slot, () => { acked = true; client?.session.send(rp.errAck(9011, 0)); });
       if (!acked) client?.session.send(rp.errAck(9011, err));
-      say(err === 0 ? "Votação de líder iniciada. Vote com /sim ou /nao." : LEADER_TEXT()[err] ?? LEADER_TEXT()[LEADER_ERR.fail]);
+      say(err === 0 ? "Host vote started. Vote with /sim or /nao." : LEADER_TEXT()[err] ?? LEADER_TEXT()[LEADER_ERR.fail]);
       return true;
     }
     case "sim": case "nao": {
       const v = room ? activeVote(room) : null;
-      if (!room || !v) { say("Não há votação em andamento."); return true; }
+      if (!room || !v) { say("No vote in progress."); return true; }
       const yes = cmd.name === "sim";
       const err = v.kind === "kick" ? castKickVote(p, yes) : castLeaderVote(p, yes);
-      say(err === 0 ? "Voto registrado." : err === KICK_ERR.voted ? "Você já votou." : "Você não pode votar agora.");
+      say(err === 0 ? "Vote recorded." : err === KICK_ERR.voted ? "You have already voted." : "You cannot vote now.");
       return true;
     }
     default:
-      say("Comando desconhecido. Digite /ajuda.");
+      say("Unknown command. Type /ajuda.");
       return true;
   }
 }

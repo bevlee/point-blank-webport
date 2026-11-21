@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { applyPhysicalMapLighting, initPhysicalFinish } from "./render/physicalFinish";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { lockPointer } from "./lockPointer.ts";
 import { Game, type GameDeps } from "./game/game";
@@ -20,7 +21,7 @@ import { warmScene } from "./render/warmup";
 import { TEST_EQUIPPED } from "./game/testLoadout";
 import { BOT_WEAPON } from "./game/weaponAdapter";
 
-export interface StartGameOptions extends Pick<GameDeps, "net" | "localTeam" | "localName" | "localRank" | "match" | "onMatchEnd" | "respawnInventory" | "localChara" | "itemEffects" | "botCount" | "botSkill" | "botAllies" | "missions" | "missionPanel" | "clanMatch" | "stageType" | "room"> {
+export interface StartGameOptions extends Pick<GameDeps, "net" | "localTeam" | "localName" | "localRank" | "match" | "onMatchEnd" | "respawnInventory" | "savedLoadouts" | "localChara" | "itemEffects" | "botCount" | "botSkill" | "botAllies" | "missions" | "missionPanel" | "clanMatch" | "stageType" | "room"> {
   /** Client map to load (default: ?map= / nstation). */
   map?: MapId;
   /** Net mode: "Sair da partida" button on the pause overlay. */
@@ -71,6 +72,7 @@ interface Prepared {
   level: LevelBuildResult;
   levelName: string;
   debugGroup: THREE.Group;
+  disposePhysical: () => void;
 }
 
 /** the room battle's prepare (prepareGame), taken by its startGame */
@@ -95,6 +97,7 @@ export function discardPrepared(): void {
   pending = null;
   void p?.p.then((x) => {
     releaseMatch(x.renderer, [x.scene, x.camera], "discarded prepare");
+    x.disposePhysical();
     x.world.free();
   }, () => {});
 }
@@ -163,6 +166,8 @@ async function prepare(map: MapId | undefined, set: MatchSet): Promise<Prepared>
   level.visualGroup.updateMatrix();
   scene.add(level.visualGroup);
   configurePbRenderer(renderer, scene); // fog of the i3World (lighting.json), after buildRealLevel loaded it
+  const disposePhysical = new URLSearchParams(location.search).get("m4finish") === "physical" ? await initPhysicalFinish(renderer) : () => {};
+  if (new URLSearchParams(location.search).get("m4finish") === "physical") applyPhysicalMapLighting(renderer, scene, camera, level.spawn);
   const camFar = pbLighting()?.camFar;
   if (camFar) {
     camera.far = camFar; // Stage.pef CamFar
@@ -182,7 +187,7 @@ async function prepare(map: MapId | undefined, set: MatchSet): Promise<Prepared>
   await warmScene(renderer, scene, camera, warm?.objects).catch((e) => console.warn("[warmup]", e));
   warm?.dispose();
   setBattleProgress(0.9); // shaders compiled; the room handshake (roomScreen) takes it on
-  return { map: CurrentMap, renderer, scene, camera, world, level, levelName, debugGroup };
+  return { map: CurrentMap, renderer, scene, camera, world, level, levelName, debugGroup, disposePhysical };
 }
 
 export async function startGame(opts: StartGameOptions = {}): Promise<GameHandle> {
@@ -195,7 +200,7 @@ export async function startGame(opts: StartGameOptions = {}): Promise<GameHandle
     discardPrepared();
     prepP = prepare(opts.map, localMatchSet(opts));
   }
-  const { map, renderer, scene, camera, world, level, levelName, debugGroup } = await prepP;
+  const { map, renderer, scene, camera, world, level, levelName, debugGroup, disposePhysical } = await prepP;
   const ac = new AbortController();
   const signal = ac.signal;
 
@@ -250,16 +255,16 @@ export async function startGame(opts: StartGameOptions = {}): Promise<GameHandle
   }, { signal });
 
   const row = (k: string, t: string) => `<div class="ov-row"><span class="ov-key">${k}</span><span>${t}</span></div>`;
-  const kn = (a: keyof typeof PB_KEYS) => PB_KEYS[a][0].replace(/^(Key|Digit)/, "").replace(/(Left|Right)$/, "").replace("Control", "Ctrl").replace("Space", "Espaço");
+  const kn = (a: keyof typeof PB_KEYS) => PB_KEYS[a][0].replace(/^(Key|Digit)/, "").replace(/(Left|Right)$/, "").replace("Control", "Ctrl").replace("Space", "Space");
   blocker.innerHTML =
     `<div class="ov-panel"><div class="ov-logo"><img src="/assets/ui/cross/brand/logo.png" alt="Project Blackout" draggable="false"></div>` +
-    `<div class="ov-meta"><span>${MAP_LABELS[map]}</span><span class="ov-sep">·</span><span>${opts.match?.mode === "BOMB" ? "Bomba" : "Mata-mata"}</span></div>` +
-    `<button class="ov-play" type="button">Clique para jogar</button><div class="ov-controls">` +
-    `<div class="ov-group"><h3>Movimento</h3>${row("WASD", "Mover")}${row(kn("walk"), "Andar (silencioso)")}${row(kn("crouch"), "Agachar")}${row(kn("jump"), "Pular")}</div>` +
-    `<div class="ov-group"><h3>Combate</h3>${row("Bot. esq.", "Atirar")}${row("Bot. dir.", "Mirar")}${row(kn("reload"), "Recarregar")}${row(kn("drop"), "Largar arma")}</div>` +
-    `<div class="ov-group"><h3>Armas</h3>${row("1-5", "Selecionar")}${row("Roda", "Trocar")}${row(kn("lastWeapon"), "Última arma")}${row(kn("extension"), "Extensão (laser)")}</div>` +
-    `<div class="ov-group"><h3>Interface</h3>${row("Tab", "Placar")}${row("Esc", "Menu")}${row("Enter", "Chat")}${row(PB_KEYS.radio.map((c) => c.slice(3)).join(" "), "Rádio")}</div></div>` +
-    (opts.onLeave ? `<button id="pbleave" class="ov-leave" type="button">Sair da partida</button>` : "") + `</div>`;
+    `<div class="ov-meta"><span>${MAP_LABELS[map]}</span><span class="ov-sep">·</span><span>${opts.match?.mode === "BOMB" ? "Bomb Mission" : "Deathmatch"}</span></div>` +
+    "<button class=\"ov-play\" type=\"button\">Click to play</button><div class=\"ov-controls\">" +
+    `<div class="ov-group"><h3>Movement</h3>${row("WASD", "Move")}${row(kn("walk"), "Walk (silent)")}${row(kn("crouch"), "Crouch")}${row(kn("jump"), "Jump")}</div>` +
+    `<div class="ov-group"><h3>Combat</h3>${row("Left mouse", "Fire")}${row("Right mouse", "Aim")}${row(kn("reload"), "Reload")}${row(kn("drop"), "Drop weapon")}</div>` +
+    `<div class="ov-group"><h3>Weapons</h3>${row("1-5", "Select")}${row("Wheel", "Switch")}${row(kn("lastWeapon"), "Last weapon")}${row(kn("extension"), "Extension (laser)")}</div>` +
+    `<div class="ov-group"><h3>Interface</h3>${row("Tab", "Scoreboard")}${row("Esc", "Menu")}${row("Enter", "Chat")}${row(PB_KEYS.radio.map((c) => c.slice(3)).join(" "), "Radio")}</div></div>` +
+    (opts.onLeave ? "<button id=\"pbleave\" class=\"ov-leave\" type=\"button\">Leave match</button>" : "") + `</div>`;
   blocker.classList.remove("hidden");
 
   const input = new Input(document.body);
@@ -280,6 +285,7 @@ export async function startGame(opts: StartGameOptions = {}): Promise<GameHandle
     onMatchEnd: opts.onMatchEnd,
     onLeave: opts.onLeave,
     respawnInventory: opts.respawnInventory,
+    savedLoadouts: opts.savedLoadouts,
     localChara: opts.localChara,
     itemEffects: opts.itemEffects,
     botCount: opts.botCount,
@@ -374,6 +380,7 @@ export async function startGame(opts: StartGameOptions = {}): Promise<GameHandle
       // Before game.dispose, which detaches the actors from the scene
       releaseMatch(renderer, [scene, camera]);
       game.dispose();
+      disposePhysical();
       world.free();
       blocker.classList.add("hidden");
       if (w.__pb === game) delete w.__pb;

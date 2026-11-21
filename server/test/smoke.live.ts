@@ -1,6 +1,7 @@
 // Minimal live smoke of the TS servers (no browser): account-api login -> TS Auth (+ meta 2316/2318/2320) ->
-// TS Game USER_ENTER -> channel -> lobby (2588) -> create room (3593) -> second player joins (3586) + ready.
-//   node --experimental-transform-types --no-warnings server/test/smoke.live.ts --gw ws://127.0.0.1:8192
+// TS Game USER_ENTER -> channel -> lobby (2588) -> create room (3593) -> second player joins (3586) + ready -> battle, kill,
+// early end (TIMERSYNC 0). Needs a server started with PB_DEV_OPS=1 (the battle guard drops an early end otherwise).
+//   node --experimental-transform-types --no-warnings server/test/smoke.live.ts --gw ws://127.0.0.1:8192 [--map <server mapId>] [--room-only]
 import { AuthClient, gameTargetForServer } from "../../src/net/authClient.ts";
 import { GameClient } from "../../src/net/gameClient.ts";
 import { RoomClient, WIRE_READY } from "../../src/net/roomClient.ts";
@@ -10,6 +11,9 @@ import { pool } from "../src/db.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const GW = arg("--gw", "ws://127.0.0.1:8192");
+/** --room-only: skip the social / GM / clan steps (the GM ones need a GM account) and go straight to the room + match */
+const ROOM_ONLY = process.argv.includes("--room-only");
+const MAP = process.argv.includes("--map") ? Number(arg("--map", "")) : undefined;
 const API = GW.replace(/^ws/, "http");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ok: string[] = [];
@@ -75,7 +79,7 @@ const A = await enter("a", (pid) => pool.query(`UPDATE accounts SET rank=20, acc
 await sleep(1500);
 let bPid = 0n;
 const B = await enter("b", async (pid) => { bPid = pid; });
-{ // F5: lobby chat, friend invite, note, quest list, clan list/enter
+if (!ROOM_ONLY) { // F5: lobby chat, friend invite, note, quest list, clan list/enter
   const a = A.game.conn, b = B.game.conn;
   const u = (w: PacketWriter, t: string) => { for (let i = 0; i < t.length; i++) w.writeH(t.charCodeAt(i)); return w; };
   const fr = b.waitFor(1815, 3000), fa = a.waitFor(1815, 3000);
@@ -89,7 +93,7 @@ const B = await enter("b", async (pid) => { bPid = pid; });
   const cl = a.waitFor(1000, 3000); a.send(997, new PacketWriter().writeC(0).writeC(0).writeC(0).writeC(0)); await cl; step("clan list 997 -> 1000");
   const ce = a.waitFor(770, 3000); a.send(769); await ce; step("clan enter 769 -> 770");
 }
-{ // missions (cards), season pass, random boxes, GM commands, clan ops
+if (!ROOM_ONLY) { // missions (cards), season pass, random boxes, GM commands, clan ops
   const a = A.game.conn, b = B.game.conn;
   const u = (w: PacketWriter, t: string) => { for (let i = 0; i < t.length; i++) w.writeH(t.charCodeAt(i)); return w; };
   const e32 = (r: { readD(): number }) => (r.readD() >>> 0).toString(16);
@@ -129,7 +133,7 @@ const B = await enter("b", async (pid) => { bPid = pid; });
   const cl = a.waitFor(809, 3000); a.send(808); step(`clan close 808 -> 809 err 0x${e32(await cl)}`);
 }
 await sleep(4200);
-const room = await A.room.create({ name: `smoke ${Date.now() % 1000}`, slots: 8, killTime: 0x60 });
+const room = await A.room.create({ name: `smoke ${Date.now() % 1000}`, slots: 8, killTime: 0x60, ...(MAP !== undefined && { mapId: MAP }) });
 step(`A create room #${room.roomId} map ${room.mapId}`);
 const bSlot = await B.room.join(room.roomId);
 step(`B join slot ${bSlot}`);
@@ -154,12 +158,17 @@ step("B ready seen by A");
   A.room.reportKill(bSlot, 100003004, false);
   await death; await sleep(300);
   step(`kill -> DEATH_ACK; 2359 QUEST_CHANGE A x${seen.a.get(2359) ?? 0} B x${seen.b.get(2359) ?? 0}`);
-  const end = new Promise<void>((res) => { A.room.onEndBattle = () => res(); });
+  // TIMERSYNC 0 with the clock still running is a dev op: the battle guard drops it unless the server runs with PB_DEV_OPS=1
+  const end = new Promise<void>((res, rej) => {
+    const t = setTimeout(() => rej(new Error("no ENDBATTLE 5 s after TIMERSYNC 0: start the server with PB_DEV_OPS=1 (battle guard)")), 5000);
+    A.room.onEndBattle = () => { clearTimeout(t); res(); };
+  });
   A.room.timerSync(0);
   await end; await sleep(1500);
   step(`ENDBATTLE; A season 8456 x${seen.a.get(8456) ?? 0} 8451 x${seen.a.get(8451) ?? 0} 8450 x${seen.a.get(8450) ?? 0}`);
   offA(); offB();
-  if (!seen.a.get(2359) || !seen.b.get(2359) || !seen.a.get(8450)) throw new Error("missing mission/season pushes");
+  // B owns a mission card set only after the skipped "buy card set" step, so --room-only expects no 2359 for B
+  if (!seen.a.get(2359) || (!ROOM_ONLY && !seen.b.get(2359)) || !seen.a.get(8450)) throw new Error("missing mission/season pushes");
 }
 console.log(`SMOKE PASS (${ok.length} steps)`);
 process.exit(0);

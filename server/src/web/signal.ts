@@ -24,8 +24,9 @@
 // (static TURN), CF_TURN_KEY_ID + CF_TURN_API_TOKEN (Cloudflare Realtime TURN: short-lived credentials, see cfTurn).
 import type { WebSocket, RawData } from "ws";
 import { readSignalTicket } from "./signalTicket.ts";
+import { serverEnv } from "../config.ts";
 
-const env = (k: string, d = "") => process.env[k] ?? d;
+const env = serverEnv;
 const list = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
 
 interface IceServer { urls: string[]; username?: string; credential?: string }

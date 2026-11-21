@@ -149,7 +149,7 @@ async function handleLogin(st: AuthState, req: LoginReq): Promise<void> {
   // !IsTestMode && !GameLocales.Contains(locale) is skipped: Settings.ini Test=True locally.
   if (!valid) {
     c.send(disconnectionSuccessAck(EventError.DISCONNECT_INVALID_LOGIN));
-    log(`login validation failed [${player.username}] ver=${req.clientVersion} res=${req.resolution}`);
+    log(`login validation failed [${player.username}] version=${req.clientVersion} res=${req.resolution}`);
     c.close(true, 1000);
     return;
   }

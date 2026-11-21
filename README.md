@@ -1,5 +1,7 @@
 # Point Blank web port
 
+Standalone Docker hosting, HTTPS, TURN and backup instructions: [deploy/README.md](deploy/README.md).
+
 Read this in Portuguese: [README.pt-BR.md](README.pt-BR.md).
 
 A web port of Point Blank (the Point Blank Cross client) for the browser. The client is TypeScript + Vite + three.js + Rapier. The server (`server`) speaks the original binary protocol and uses Postgres. Matches run peer-to-peer (WebRTC). The server handles login, lobby, rooms, items and progression.
@@ -9,6 +11,10 @@ A web port of Point Blank (the Point Blank Cross client) for the browser. The cl
 > **Point Blank, its assets, its network protocol and its game data belong to Zepetto and are not covered by the MIT license.** This also applies to `server/runtime/Config/` and `server/runtime/Data/`, which contain game data kept as is.
 >
 > Use the project with a client you have the right to use. Do not publish extracted assets. This project is not affiliated with or endorsed by Zepetto.
+
+## Bev Deploy
+
+Kubernetes deployment for `https://pb.bevsoft.com`, namespace `pb`: see [deployment and operations](k8s/README.md). The standalone Docker setup remains available under `deploy/`.
 
 ## Requirements
 
@@ -170,7 +176,7 @@ The server reads `server/.env.local` (if it exists) and then the environment var
 | `PB_DB_NAME` | `pb` | Database name. |
 | `PB_DB_USER` / `PB_DB_PASS` | `postgres` / `postgres` | User and password. For local use only. |
 | `PB_DB_URL` | empty | Full URL (`postgres://user:password@host:port/database`). Replaces host, port, name, user and password. |
-| `PB_DB_SSL` / `PB_DB_SSL_STRICT` | `0` / `0` | `1` turns on TLS to Postgres (hosted databases). `PB_DB_SSL_STRICT=1` also checks the certificate. |
+| `PB_DB_SSL` / `PB_DB_SSL_STRICT` | `0` / `1` | `1` turns on TLS to Postgres (hosted databases). `PB_DB_SSL_STRICT=1` also checks the certificate. |
 | `PB_WEB_PORT` | `8090` | Port of the web front (`/tcp`, `/signal`, `/api`, `/health`). |
 | `PB_ADVERTISE_HOST` | empty | Host that the server list sends to the client. Empty uses the database host (`127.0.0.1`). Set your LAN IP if another machine will play. |
 | `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` | empty | TURN server for P2P matches behind a strict NAT. Without it, the project uses only public STUN. |
@@ -236,3 +242,9 @@ The tools and the game were built and tested against Point Blank Cross. Other Po
 ## License
 
 The code of this project: MIT, see [LICENSE](LICENSE). Point Blank, its assets, protocol and game data: Zepetto, outside the MIT license (see the notice at the top).
+
+## Local security changes
+
+Listeners bind to loopback by default. To accept remote browser players, explicitly set `PB_WEB_HOST` and `PB_VITE_HOST`, and set `PB_WEB_ORIGINS` to the exact frontend origin. A configured origin list replaces local development exceptions. Use HTTPS and a production frontend build for remote play. Set `VITE_API_URL` to the HTTPS backend origin and `VITE_GW_URL` to its WSS origin. Keep raw game TCP listeners private or disable them with `PB_NO_TCP=1`.
+
+`PB_DB_SSL=1` now verifies the database certificate by default. `PB_DEV_OPS=1` is required to enable development battle commands. Malformed HTTP targets return 400 instead of crashing the backend.

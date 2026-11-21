@@ -4,6 +4,8 @@
 interface ImportMetaEnv {
   /** server web front as wss origin (wss://<service>.run.app): /tcp and /signal (src/net/connection.ts) */
   readonly VITE_GW_URL?: string;
+  /** Force TURN relay candidates for privacy or deployment acceptance tests. Requires backend TURN. */
+  readonly VITE_RELAY_ONLY?: string;
   /** server web front as https origin: /api/register, /api/login (src/net/accountApi.ts) */
   readonly VITE_API_URL?: string;
   /** asset store origin (the R2 Worker) the /assets/ tree is served from (src/assetBoot.ts) */

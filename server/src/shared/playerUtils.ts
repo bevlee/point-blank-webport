@@ -311,6 +311,11 @@ export async function tryCreateItem(model: ItemsModel, p: Account): Promise<bool
       return true;
     }
     model.objectId = ex.objectId;
+    if (model.equip === ItemEquipType.Permanent && ex.equip !== ItemEquipType.Permanent) {
+      await pool.query(`UPDATE player_items SET count=$1,equip=$2 WHERE owner_id=$3 AND id=$4`, [model.count, model.equip, String(p.playerId), model.id]);
+      ex.equip = model.equip; ex.count = model.count;
+      return true;
+    }
     if (ex.equip === ItemEquipType.Durable) {
       model.count = isRepairable(model.id) ? 100 : (model.count + ex.count) >>> 0;
       await pool.query(`UPDATE player_items SET count=$1 WHERE owner_id=$2 AND id=$3`, [model.count, String(p.playerId), model.id]);

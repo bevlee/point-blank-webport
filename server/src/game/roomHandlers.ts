@@ -108,6 +108,13 @@ function matchWeapons(r: RoomModel): Set<number> {
   return out;
 }
 
+/** [web] modes where a dead fighter comes back in the same round (not Bomb / Destroy / Annihilation / Defense / Convoy / Ace).
+ * There an honest killer reports one kill per victim life (src/net/battle.ts reportKillOnce), so a DEATH_REQ on a victim the server
+ * still has dead is a kill of its next life whose RESPAWN is still on the way: the kill goes victim -> P2P -> killer -> server and the
+ * RESPAWN victim -> server, and jitter can swap them. Skipping it lost spawn kills (TLA+ server/test/tla/BattleLife.tla). The
+ * deaths-per-time-in-battle cap below still bounds what a client can claim. */
+const respawnsInMatch = (r: RoomModel) => !r.thisModeHaveRounds();
+
 /**why a DEATH_REQ is refused, or null. The killer is the sender's own fighting slot in every room (honest clients report only
  * their own kills: an AI kill never comes as DEATH_REQ), each victim a live fighter of the other team (or the killer itself) with no
  * more deaths than its time in battle allows. Victims already dead are left to the caller (skipped). The weapon is not a reason:
@@ -116,7 +123,7 @@ function deathReqError(r: RoomModel, p: Account, ks: SlotModel, k: rp.FragInfo):
   if (ks.id !== p.slotId || ks.state < SlotState.BATTLE || ks.specGM) return `DEATH_REQ for killer slot ${k.killerIdx}`;
   for (const f of k.frags) {
     const v = r.getSlot(f.victim);
-    if (v && v.deathState & DeadEnum.Dead) continue;
+    if (v && v.deathState & DeadEnum.Dead && !respawnsInMatch(r)) continue;
     if (!v || v.state !== SlotState.BATTLE || v.playerId === 0n || v.specGM || v.spectator) return `DEATH_REQ victim slot ${f.victim} not fighting`;
     if (v.id !== ks.id && r.roomType !== RoomCondition.FreeForAll && v.team === ks.team) return `DEATH_REQ victim slot ${v.id} on the killer's team`;
     const lives = 1 + Math.floor((v.inBattleTime() * 1000) / Math.max(MIN_LIFE_MS, respawnMs(r, v)));
@@ -285,7 +292,8 @@ export function removePlayer(r: RoomModel, p: Account, warnAll: boolean, motive 
   void dao.update1("accounts", "status", p.status.buffer, "player_id", p.playerId);
   void syncPlayerToFriends(p, false); // C# RoomModel.InternalRemovePlayer
   if (!r.channel.lobbyPlayers.includes(p)) r.channel.lobbyPlayers.push(p);
-  r.updateSlotsInfo();
+  r.updateSlotsInfo(); // its slot info hands the leadership over when the leader's seat is empty (slotInfoAck)
+  followLeader(r);
   if (flag) r.updateRoomInfo();
 }
 
@@ -509,6 +517,9 @@ function startCounter(r: RoomModel, type: number, p: Account, s: SlotModel): voi
     s.timing = null;
     if (p.room !== r || p.slotId !== s.id) return;
     send(p, rp.kickBattlePlayerAck(type === 0 ? 0x8000100a : 0x8000100b));
+    // [web] the leader hosts the match: handing the slot back to the room alone left a starting match with its leader in the
+    // room (the guests then waited out their own counters). The leader quits the match instead: leadership moves, or it ends.
+    if (s.id === r.leader) return quitMatch(r, p, s);
     send(p, rp.giveUpBattleAck(p, 0));
     r.changeSlotState(s, SlotState.NORMAL, true);
     battleEndPlayersCount(r, r.isBotMode());
@@ -525,7 +536,8 @@ export function handleLoadingStart(c: GameClient, rd: PacketReader): void {
       startCounter(r, 0, p, s);
       r.changeSlotState(s, SlotState.RENDEZVOUS, true);
       r.mapName = name;
-      if (s.id === r.leader) { r.udpServer = { host: "127.0.0.1", port: config.matchPort }; r.state = RoomState.RENDEZVOUS; r.updateRoomInfo(); }
+      // [web] only forward: a leader handed over mid-start may load after the match already reached PRE_BATTLE / BATTLE
+      if (s.id === r.leader) { r.udpServer = { host: "127.0.0.1", port: config.matchPort }; if (r.state < RoomState.RENDEZVOUS) { r.state = RoomState.RENDEZVOUS; r.updateRoomInfo(); } }
     }
   }
   c.session.send(rp.loadingStartAck());
@@ -557,7 +569,7 @@ export function handlePreStartBattle(c: GameClient, rd: PacketReader): void {
     r.changeSlotState(s, SlotState.NORMAL, true); battleEndPlayersCount(r, bot); s.stopTiming(); return;
   }
   s.preStartDate = Date.now();
-  if (s.id === r.leader) { r.state = RoomState.PRE_BATTLE; r.updateRoomInfo(); }
+  if (s.id === r.leader && r.state < RoomState.PRE_BATTLE) { r.state = RoomState.PRE_BATTLE; r.updateRoomInfo(); } // [web] only forward (see LOADING_START)
   r.changeSlotState(s, SlotState.PRESTART, true);
   // [web] the /signal ticket of this account and slot, ahead of the 5130 that gives the client the room key
   c.session.sendText({ t: "signalTicket", ticket: mintSignalTicket(signalKey(r.uniqueRoomId, r.seed), s.id, p.playerId) });
@@ -598,9 +610,14 @@ export function handleStartBattle(c: GameClient): void {
   spawnReadyPlayers(r);
 }
 
+/** [web] the first spawn of the match: the room has not reached BATTLE yet. The C# keys this on PRE_BATTLE, which only the leader's
+ * own PRESTART sets; when the leader quits during loading and the new leader had already sent PRESTART, the room stayed in
+ * RENDEZVOUS while its players spawned, and DEATH / TIMERSYNC (they need BATTLE) were ignored for the rest of the match. */
+const isOpeningSpawn = (r: RoomModel) => r.state >= RoomState.LOADING && r.state < RoomState.BATTLE;
+
 function spawnReadyPlayers(r: RoomModel): void {
   const cdMode = r.thisModeHaveRounds() && [3, 5, 7, 9].includes(r.countdownIG);
-  if (r.state === RoomState.PRE_BATTLE && !r.preMatchCD && cdMode && !r.isBotMode()) {
+  if (isOpeningSpawn(r) && !r.preMatchCD && cdMode && !r.isBotMode()) {
     r.preMatchCD = true;
     r.sendToPlayers(new Uint8Array([5275 & 0xff, 5275 >> 8, r.countdownIG]));
   }
@@ -622,7 +639,7 @@ function getDinossaurs(r: RoomModel, force: boolean, idx: number): number[] {
 }
 
 function executeSpawnReadyPlayers(r: RoomModel): void {
-  const now = Date.now();
+  const now = Date.now(), opening = isOpeningSpawn(r);
   for (const s of r.slots) {
     if (s.state === SlotState.BATTLE_READY && s.isPlaying === 0 && s.playerId > 0n) {
       s.isPlaying = 1; s.startTime = now; s.state = SlotState.BATTLE;
@@ -631,14 +648,14 @@ function executeSpawnReadyPlayers(r: RoomModel): void {
   }
   r.updateSlotsInfo();
   const dinos = getDinossaurs(r, false, -1);
-  if (r.state === RoomState.PRE_BATTLE) { r.battleStart = r.isDinoMode() ? now + 5 * 60000 : now; r.matchStart = now; setGameModeSpecificBars(r); }
+  if (opening) { r.battleStart = r.isDinoMode() ? now + 5 * 60000 : now; r.matchStart = now; setGameModeSpecificBars(r); }
   const b1 = rp.roundPreStartAck(r, dinos), b2 = rp.roundStartAck(r), b3 = rp.recordAck(r);
   let dinoFlag = false;
   for (const s of r.slots) {
     const P = s.playerId > 0n ? r.svc.getAccount(s.playerId) : null;
     if (!(s.state === SlotState.BATTLE && s.isPlaying === 1 && P)) continue;
     s.isPlaying = 2;
-    if (r.state === RoomState.PRE_BATTLE) {
+    if (opening) {
       r.sendAboutSlot(s.id, rp.startBattleAck(r, s, dinos), r.getAllPlayers(SlotState.READY, 1));
       send(P, b1);
       if (!r.isDinoMode()) send(P, b2); else dinoFlag = true;
@@ -648,7 +665,7 @@ function executeSpawnReadyPlayers(r: RoomModel): void {
       send(P, b2); send(P, b3);
     }
   }
-  if (r.state === RoomState.PRE_BATTLE) { r.state = RoomState.BATTLE; r.updateRoomInfo(); }
+  if (opening) { r.state = RoomState.BATTLE; r.updateRoomInfo(); }
   r.updateSlotsInfo();
   if (dinoFlag) r.roundTimer = setTimeout(() => { r.roundTimer = null; if (r.state === RoomState.BATTLE) r.sendToPlayers(rp.roundStartAck(r), r.getAllPlayers(SlotState.BATTLE, 0)); }, 5250);
 }
@@ -688,6 +705,7 @@ function respawnSlot(c: GameClient, p: Account, r: RoomModel | null, f: number[]
   if (!r || p.room !== r || (r.state !== RoomState.BATTLE && r.state !== RoomState.PRE_BATTLE)) return;
   const s = r.getSlot(p.slotId);
   if (!s || s.state !== SlotState.BATTLE) return;
+  if (s.staleRespawns > 0) { s.staleRespawns--; return; } // the RESPAWN of a life a DEATH_REQ already ended (handleDeath)
   // after a DEATH_REQ death the respawn waits RespawnTime (coupon cut, minus the slack); an early one is served when due, not
   // dropped, so a late kill report never leaves an honest player dead on the server. The round restart (UseChat) respawns at once.
   const wait = s.deathState & DeadEnum.Dead && !(s.deathState & DeadEnum.UseChat) ? s.deathAt + respawnMs(r, s) - RESPAWN_SLACK_MS - Date.now() : 0;
@@ -755,7 +773,7 @@ export function handleDeath(c: GameClient, rd: PacketReader): void {
   if (!p || !r || r.roundTimer || r.state < RoomState.BATTLE) return;
   const bot = r.isBotMode(), ks = r.getSlot(k.killerIdx), me = r.getSlot(p.slotId);
   if (!ks || !me) return;
-  if (k.frags.length && k.frags.every((f) => (r.slots[f.victim]?.deathState ?? 0) & DeadEnum.Dead)) return;
+  if (k.frags.length && !respawnsInMatch(r) && k.frags.every((f) => (r.slots[f.victim]?.deathState ?? 0) & DeadEnum.Dead)) return;
   //(the C# only checked the killer slot, and not in AI rooms: `!bot && ...`)
   const bad = deathReqError(r, p, ks, k);
   if (bad) return strike(c, r, me, bad);
@@ -778,7 +796,12 @@ export function handleDeath(c: GameClient, rd: PacketReader): void {
     } else {
       f.killFlag |= [2, 5, 7, 9, 8].includes(dt) || weaponClass === 6 ? KM.MassKill : KM.Piercing;
     }
-    if (!v || v.deathState & DeadEnum.Dead) continue;
+    if (!v) continue;
+    if (v.deathState & DeadEnum.Dead) {
+      if (!respawnsInMatch(r)) continue;
+      // the victim's next life (see respawnsInMatch): its RESPAWN is held here (dropped) or still on the way (dropped when it comes)
+      if (v.respawnTimer) { clearTimeout(v.respawnTimer); v.respawnTimer = null; } else v.staleRespawns++;
+    }
     if (v.killsOnLife > 3) f.killFlag |= KM.ChainStopper;
     v.allDeaths++;
     if (f.assist !== k.killerIdx && r.getSlot(f.assist)) r.slots[f.assist].allAssists++;
@@ -1073,6 +1096,23 @@ export function handleGiveUpBattle(c: GameClient): void {
   if (!p || !r || r.state < RoomState.LOADING) return;
   const s = r.getSlot(p.slotId);
   if (!s || s.state < SlotState.LOAD) return;
+  quitMatch(r, p, s);
+}
+
+/** [web] a starting match follows its leader: LOADING_START of the leader sets the UDP host (RENDEZVOUS) and its PRESTART sets
+ * PRE_BATTLE. A leader handed over mid-start (quit, disconnect, counter out) may already be past those steps as a guest, so the room
+ * would wait for steps it never sends again: its PRESTART was refused (no UDP host) and the match fell apart. */
+function followLeader(r: RoomModel): void {
+  if (!r.isPreparing() || r.state >= RoomState.BATTLE) return;
+  const L = r.slots[r.leader]?.state ?? SlotState.EMPTY;
+  let next: number = r.state;
+  if (L >= SlotState.RENDEZVOUS && next < RoomState.RENDEZVOUS) { r.udpServer = { host: "127.0.0.1", port: config.matchPort }; next = RoomState.RENDEZVOUS; }
+  if (L >= SlotState.PRESTART && next < RoomState.PRE_BATTLE) next = RoomState.PRE_BATTLE;
+  if (next !== r.state) { r.state = next; r.updateRoomInfo(); }
+}
+
+/** A player leaves the running match for the room (GIVEUPBATTLE, or the leader's loading / prestart counter running out). */
+function quitMatch(r: RoomModel, p: Account, s: SlotModel): void {
   for (const hook of slotLeftHooks) hook(r, s.id);
   const bot = r.isBotMode();
   // The C# handler counts the quitter too, so its own team is never empty and LeaveEndBattlePVP (winner = the team left
@@ -1100,7 +1140,8 @@ export function handleGiveUpBattle(c: GameClient): void {
   }
   if (s.state >= SlotState.LOAD) r.changeSlotState(s, SlotState.NORMAL, true);
   s.resetSlot();
-  c.session.send(rp.giveUpBattleAck(p, 0));
+  if (!fin) followLeader(r);
+  send(p, rp.giveUpBattleAck(p, 0));
   // [web] nobody left in the battle (AI room whose only human quit, or every player gave up): the C# path only moves
   // the leadership, so the room stayed in BATTLE with no one in it and "Começar" was ignored for good (the ready
   // handler needs READY / COUNTDOWN). Close it like ResetBattleInfo does after a normal end.

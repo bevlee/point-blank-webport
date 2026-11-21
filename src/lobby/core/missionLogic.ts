@@ -45,7 +45,7 @@ const CLASS_KEYS: Readonly<Record<number, string>> = {
   11: "GRENADESHELL", 12: "BOMBTRIGGER", 13: "CIC", 14: "DUALHANDGUN", 15: "DUALKNIFE", 16: "ROCKET_LAUNCHER", 17: "OBJECT_GUN", 18: "SMG",
   19: "DINO", 23: "KNUCKLE", 26: "ASSAULT", 34: "ASSAULT", 35: "SHOTGUN",
 };
-export const weaponClassName = (cls: number): string => S(`STBL_IDX_WEAPON_CLASS_${CLASS_KEYS[cls] ?? "UNKNOWN"}`, "DESCONHECIDO");
+export const weaponClassName = (cls: number): string => S(`STBL_IDX_WEAPON_CLASS_${CLASS_KEYS[cls] ?? "UNKNOWN"}`, "UNKNOWN");
 /** slot digit of the 6-digit item ids by weapon class (itemNames: 1xx primaries, 2 handguns, 3 melee, 4 throwing, 5 items) */
 const CLASS_SLOT: Readonly<Record<number, number>> = { 1: 3, 2: 2, 7: 4, 8: 5, 13: 2, 14: 2, 15: 3, 23: 3 };
 /** class / number -> item id (slot * 100000 + class * 1000 + number; the exe asks its weapon table, 0x5f9940) */
@@ -80,21 +80,21 @@ export function taskText(t: MissionTaskDef, progress: number, o: TaskTextOpts): 
   const classKill = type >= 40 && type <= 42; // KILL_WEAPONCLASS, DOUBLE_ / TRIPLE_KILL_WEAPONCLASS
   if (req === 1) {
     // Accm_Team 0x99af30 (Cross 0x98ef50): "(Cumulativa) " (arg3 != 0) / "(Em 1 Round) ", stage name, action
-    const head = cls ? R("STR_TBL_QUEST_ACCM_TEAM_ETC11", "(Cumulativa) ") : R("STR_TBL_QUEST_ACCM_TEAM_ETC10", "(Em 1 Round) ");
+    const head = cls ? R("STR_TBL_QUEST_ACCM_TEAM_ETC11", "Total: ") : R("STR_TBL_QUEST_ACCM_TEAM_ETC10", "Match: ");
     return `${head}${stage}${action}\n${countLine("STR_TBL_QUEST_ACCM_TEAM_ETC9", progress, limit)}`;
   }
   if (req === 3) {
     // Weapon_Cont 0x99c7d0 (Cross 0x990800, ETC6 + action with no space between): "(Em 1 Round) ", "para %s " (STAGE_ENTER / INTERCEPT) / "no %s ", weapon, "Está em uso" for the class kills, action
     const loc = stage ? R(type === 11 || type === 12 ? "STR_TBL_QUEST_WEAPON_COUNT_ETC15" : "STR_TBL_QUEST_WEAPON_COUNT_ETC14", "%s ").replace("%s", stage) : "";
-    const use = classKill ? R("STR_TBL_QUEST_WEAPON_COUNT_ETC6", "Está em uso") : "";
-    return `${R("STR_TBL_QUEST_WEAPON_COUNT_ETC13", "(Em 1 Round) ")}${loc}${weaponPart(t, o)}${use}${action}\n${countLine("STR_TBL_QUEST_WEAPON_COUNT_ETC12", progress, limit)}`;
+    const use = classKill ? R("STR_TBL_QUEST_WEAPON_COUNT_ETC6", "(Enemy Use) ") : "";
+    return `${R("STR_TBL_QUEST_WEAPON_COUNT_ETC13", "Match: ")}${loc}${weaponPart(t, o)}${use}${action}\n${countLine("STR_TBL_QUEST_WEAPON_COUNT_ETC12", progress, limit)}`;
   }
   // Weapon_Accm 0x99ba70 (reqType 2 and anything else): "(Cumulativa) ", stage name, weapon, "Usar e " for the class kills, " ", action.
   // Cross 0x98fa90 builds it the same way: strcat ETC13 (Cross ""), the stage name, "(%s) " of the class / weapon, ETC6 (Cross "Usar e",
   // no trailing space) for 40..42, the literal " " (0xc69bdc), the action, a newline when asked (0xc69be0), then ETC12. So a task with no
   // stage / weapon starts with that space (" Entre!") and a weapon task has two ("(Rifle)  Conseguir Kill"): the exe draws them too.
-  const use = classKill ? R("STR_TBL_QUEST_WEAPON_ACCM_ETC6", "Usar e ") : "";
-  return `${R("STR_TBL_QUEST_WEAPON_ACCM_ETC13", "(Cumulativa) ")}${stage}${weaponPart(t, o)}${use} ${action}\n${countLine("STR_TBL_QUEST_WEAPON_ACCM_ETC12", progress, limit)}`;
+  const use = classKill ? R("STR_TBL_QUEST_WEAPON_ACCM_ETC6", "(Enemy Use) ") : "";
+  return `${R("STR_TBL_QUEST_WEAPON_ACCM_ETC13", "Total: ")}${stage}${weaponPart(t, o)}${use} ${action}\n${countLine("STR_TBL_QUEST_WEAPON_ACCM_ETC12", progress, limit)}`;
 }
 
 // ------------------------------------------------------------------------------------------------ state helpers
@@ -141,9 +141,9 @@ export function badgeType(badge: number): -1 | 0 | 1 | 2 | 3 {
 }
 /** prize name of a badge kind (UpdatePrize 0x9544f0: RIBBON / ENSIGN / MEDALS / MEDALS _TEXT2) */
 export function badgeName(type: number): string {
-  if (type === 0) return S("STR_TBL_PROFILE_RIBBON_TEXT2", "Broche");
-  if (type === 1) return S("STR_TBL_PROFILE_ENSIGN_TEXT2", "Insígnia");
-  if (type === 2 || type === 3) return S("STR_TBL_PROFILE_MEDALS_TEXT2", "Medalha");
+  if (type === 0) return S("STR_TBL_PROFILE_RIBBON_TEXT2", "Ribbon");
+  if (type === 1) return S("STR_TBL_PROFILE_ENSIGN_TEXT2", "Badge");
+  if (type === 2 || type === 3) return S("STR_TBL_PROFILE_MEDALS_TEXT2", "Medal");
   return "";
 }
 
@@ -179,8 +179,8 @@ export function buttonState(st: MissionState, setId: number): { info: boolean; b
 // ------------------------------------------------------------------------------------------------ texts
 
 /** set name: MissionCardFix.dat; the event set has none in the BR data -> STR_PROFILE_CARD_EVENT [INFERIDO] */
-export const setName = (set: MissionSetDef): string => set.name || S("STR_PROFILE_CARD_EVENT", "Evento");
-export const goldText = (n: number): string => `${n} ${S("STBL_IDX_SHOP_MONEY", "Gold")}`;
+export const setName = (set: MissionSetDef): string => set.name || S("STR_PROFILE_CARD_EVENT", "EVENT");
+export const goldText = (n: number): string => `${n} ${S("STBL_IDX_SHOP_MONEY", "Point")}`;
 export const expText = (n: number): string => `${n} EXP`;
 /** the card shown in the prize / notices: the active card of an owned set (UpdatePrize / UpdateNotices only describe it) */
 export const cardOf = (set: MissionSetDef, card: number): MissionCardDef | undefined => set.cards[card];
@@ -194,7 +194,7 @@ export function completeInfo(p: { type: number; setId: number; card: number }): 
   const whole = p.type === 4, type = badgeType(c.badge);
   const exp = c.exp + (whole ? set.bonusExp : 0), gold = c.gold + (whole ? set.bonusPoint : 0);
   return {
-    exp: `${S("STR_UI_MISSION_EXP", "+Exp :")} ${exp}`, point: `${S("STR_UI_MISSION_POINT", "+Gold :")} ${gold}`,
+    exp: `${S("STR_UI_MISSION_EXP", "+Exp :")} ${exp}`, point: `${S("STR_UI_MISSION_POINT", "+Point :")} ${gold}`,
     badges: [type === 0, type === 1, type === 2, whole && set.bonusMaster > 0], items: whole ? set.bonusItems : [], whole,
   };
 }
@@ -214,30 +214,30 @@ export function tabSets(st: MissionState, tab: number): number[] {
 }
 
 export const MS = {
-  get tabName() { return S("STR_TBL_PROFILE_CHALLENGE_CARD_TEXT1", "Missões"); },
+  get tabName() { return S("STR_TBL_PROFILE_CHALLENGE_CARD_TEXT1", "Mission Card"); },
   get notDetected() { return "Mission card's not detected."; }, // the exe's own empty-list row (0x954d38), not a string table key
-  get challenge() { return S("STR_TBL_PROFILE_CHALLENGE_TEXT", "Missão"); },
-  get complete() { return S("STR_TBL_PROFILE_COMPLETE_TEXT", "Concluir"); },
-  get buyOk() { return S("STR_TBL_GUI_BASE_BUY_CARD", "Cartões de missão comprados com sucesso."); },
-  get deleteOk() { return S("STR_TBL_GUI_BASE_DELETE_CARD", "Excluiu pacote de cartão."); },
-  get deleteAsk() { return S("STR_TBL_PROFILE_DELETE_CARD_MESSAGE", "Deseja excluir?"); },
-  get duplicate() { return S("STR_TBL_PROFILE_CARDSET_DUPLICATE", "Já existe cartão."); },
-  get limit() { return S("STR_TBL_GUI_BASE_LIMIT_CARD_COUNT", "O número de cartão de missão está restrito a 3 tipos."); },
-  get noPoint() { return S("STR_TBL_GUI_BASE_NO_POINT_TO_GET_ITEM", "Não possúi Gold suficiente."); },
-  get noCardInfo() { return S("STR_TBL_GUI_BASE_FAIL_BUY_CARD_BY_NO_CARD_INFO", "Compra não concluída."); },
-  get notTutorial() { return S("STR_TBL_GUI_BASE_DID_NOT_TUTORIAL_MISSION_CARD", "Necessário completar baralho de missões tutorial"); },
-  get deleteNoInfo() { return S("STR_TBL_GUI_BASE_FAIL_DELETE_CARD_BY_NOT_INFO", "Exclusão falhou."); },
-  get deleteNetwork() { return S("STR_TBL_GUI_BASE_FAIL_DELETE_ITEM_BY_NETWORK_PROBLEM", "Não é possível excluir item por problema de rede."); },
-  get selectCard() { return S("STR_TBL_PROFILE_PLEASE_SELETE_CARD", "Escolha um cartão para comprar."); },
-  get detailTitle() { return S("STR_TBL_PROFILE_CHALLENGE_CARD_INFO", "Informação do cartão de missão"); },
-  get cardName() { return S("STR_TBL_PROFILE_COMPENSATE_CARDNAME_TEXT", "Nome de cartão de missão:"); },
-  get price() { return S("STR_TBL_PROFILE_CARD_PRICE", "Preço:"); },
-  get totalPoint() { return S("STR_TBL_PROFILE_TOTAL_GET_POINT", "Total de Gold adquirido:"); },
-  get totalExp() { return S("STR_TBL_PROFILE_TOTAL_GET_EXT", "Total de experiência adquirida:"); },
-  get lastPoint() { return S("STR_TBL_PROFILE_LAST_REWARD_POINT1", "Último Gold adquirido"); },
-  get lastExp() { return S("STR_TBL_PROFILE_LAST_REWARD_EXT1", "Última EXP adquirida"); },
-  get prize() { return S("STR_TBL_PROFILE_PRIZE_NAME", "Prêmio:"); },
-  get master() { return S("STR_TBL_PROFILE_MASTER_MEDALS_TEXT", "Ordem Azul"); },
+  get challenge() { return S("STR_TBL_PROFILE_CHALLENGE_TEXT", "Mission"); },
+  get complete() { return S("STR_TBL_PROFILE_COMPLETE_TEXT", "Complete"); },
+  get buyOk() { return S("STR_TBL_GUI_BASE_BUY_CARD", "Card set purchased successfully."); },
+  get deleteOk() { return S("STR_TBL_GUI_BASE_DELETE_CARD", "One set of cards deleted."); },
+  get deleteAsk() { return S("STR_TBL_PROFILE_DELETE_CARD_MESSAGE", "All mission cards in the set \nwill be deleted.\n \nDo you still want to delete?"); },
+  get duplicate() { return S("STR_TBL_PROFILE_CARDSET_DUPLICATE", "You already have the set.\nPlease purchase it again after completing or deleting all the existing cards in the set."); },
+  get limit() { return S("STR_TBL_GUI_BASE_LIMIT_CARD_COUNT", "You may only have 3 mission cards.\n \nPlease purchase again after completing or deleting the mission you have now."); },
+  get noPoint() { return S("STR_TBL_GUI_BASE_NO_POINT_TO_GET_ITEM", "Insufficient Points"); },
+  get noCardInfo() { return S("STR_TBL_GUI_BASE_FAIL_BUY_CARD_BY_NO_CARD_INFO", "Failed to purchase the card since the card information is not found."); },
+  get notTutorial() { return S("STR_TBL_GUI_BASE_DID_NOT_TUTORIAL_MISSION_CARD", "You must finish the Tutorial Mission Card Set first."); },
+  get deleteNoInfo() { return S("STR_TBL_GUI_BASE_FAIL_DELETE_CARD_BY_NOT_INFO", "Failed to delete the card since the card information is not found."); },
+  get deleteNetwork() { return S("STR_TBL_GUI_BASE_FAIL_DELETE_ITEM_BY_NETWORK_PROBLEM", "Failed to delete the item due to a network problem."); },
+  get selectCard() { return S("STR_TBL_PROFILE_PLEASE_SELETE_CARD", "Select card to purchase"); },
+  get detailTitle() { return S("STR_TBL_PROFILE_CHALLENGE_CARD_INFO", "Mission Card Information"); },
+  get cardName() { return S("STR_TBL_PROFILE_COMPENSATE_CARDNAME_TEXT", "Mission card name:"); },
+  get price() { return S("STR_TBL_PROFILE_CARD_PRICE", "Price:"); },
+  get totalPoint() { return S("STR_TBL_PROFILE_TOTAL_GET_POINT", "Total Earned Points:"); },
+  get totalExp() { return S("STR_TBL_PROFILE_TOTAL_GET_EXT", "Total Earned EXP:"); },
+  get lastPoint() { return S("STR_TBL_PROFILE_LAST_REWARD_POINT1", "Last rewarded point"); },
+  get lastExp() { return S("STR_TBL_PROFILE_LAST_REWARD_EXT1", "Last rewarded EXP"); },
+  get prize() { return S("STR_TBL_PROFILE_PRIZE_NAME", "Name:"); },
+  get master() { return S("STR_TBL_PROFILE_MASTER_MEDALS_TEXT", "Master Medal"); },
   /** Detail: the Lua binds STR_TBL_PROFILE_LAST_REWARD_ITEM, which pt-BR lacks: STR_TBL_TUTORIAL_RESULT_GET_ITEM [INFERIDO] */
-  get lastItem() { return S("STR_TBL_TUTORIAL_RESULT_GET_ITEM", "Item obtido"); },
+  get lastItem() { return S("STR_TBL_TUTORIAL_RESULT_GET_ITEM", "Obtained Item"); },
 };

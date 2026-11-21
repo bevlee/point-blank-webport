@@ -1,0 +1,30 @@
+# Optional self-hosted TURN on a Linux host with a publicly reachable IP.
+# Copy to turnserver.conf (git-ignored) and replace every REPLACE value.
+listening-port=3478
+min-port=49160
+max-port=49259
+external-ip=REPLACE_WITH_PUBLIC_IP
+realm=REPLACE_WITH_TURN_HOSTNAME
+fingerprint
+lt-cred-mech
+user=REPLACE_USERNAME:REPLACE_PASSWORD
+user-quota=16
+total-quota=64
+no-cli
+no-multicast-peers
+# Do not let an authenticated relay reach private infrastructure or local services.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+# For a TLS fallback, supply a valid certificate for the TURN hostname and mount it read-only.
+# tls-listening-port=5349
+# cert=/etc/turn-tls/fullchain.pem
+# pkey=/etc/turn-tls/privkey.pem
+# Without TLS configured this example provides UDP/TCP on 3478 only.
+no-tls
+no-dtls

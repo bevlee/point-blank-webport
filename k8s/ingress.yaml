@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pb-ingress
+  namespace: pb
+  labels:
+    app: pb
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - pb.bevsoft.com
+      secretName: pb-tls
+  rules:
+    - host: pb.bevsoft.com
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 8090
+          - path: /tcp
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 8090
+          - path: /signal
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 8090
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 8090
+          - path: /ready
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 8090
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pb
+                port:
+                  number: 80

@@ -47,5 +47,8 @@ export function isCharaComplete(itemId: number): boolean {
 
 /** false = an Item-tab good (coupon, function item, card, ...) not complete in Cross (hidden); true before the list loads. */
 export function isItemComplete(itemId: number): boolean {
-  return !items || items.has(itemId);
+  if (!items || items.has(itemId)) return true;
+  // Coupon IDs encode the duration as 17 DD GGG; support belongs to the base function 17 00 GGG.
+  const base = Math.floor(itemId / 100000) === 17 ? 1700000 + itemId % 1000 : itemId;
+  return items.has(base);
 }

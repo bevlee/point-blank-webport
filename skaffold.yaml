@@ -1,0 +1,28 @@
+apiVersion: skaffold/v4beta14
+kind: Config
+metadata:
+  name: pb
+build:
+  # `git describe --tags`: v0.2.0 on a tagged commit, v0.2.0-3-gabc1234 three
+  # commits later, with -dirty for uncommitted changes.
+  tagPolicy:
+    gitCommit:
+      variant: Tags
+  platforms: [linux/arm64]
+  local:
+    push: true
+    useBuildkit: true
+  artifacts:
+    - image: docker.io/bevdev1/pb
+      docker:
+        dockerfile: Dockerfile
+    - image: docker.io/bevdev1/pb-turn
+      docker:
+        dockerfile: deploy/Turn.Dockerfile
+deploy:
+  kubectl:
+    defaultNamespace: pb
+manifests:
+  kustomize:
+    paths:
+      - k8s

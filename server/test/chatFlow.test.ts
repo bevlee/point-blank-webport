@@ -73,7 +73,7 @@ test("flood: the 6th attempt in 5 s mutes the connection for 60 s with a Server 
   await handleChat(c, chatPacket(1, "m6"));
   assert.equal(f.ops(3606).length, 0, "dropped");
   const notice = f.sent.filter((s) => s.op === 2571 && s.to === a.playerId).map((s) => chatText(s.bytes));
-  assert.match(notice[0], /rápido demais.*60 s/);
+  assert.match(notice[0], /too quickly.*60 s/);
   f.clear();
   const w = new PacketReader(new PacketWriter(256).writeU("P1", 66).writeH(2).writeU("oi", 4).toBytes());
   await handleWhisper(c, 1826, w);

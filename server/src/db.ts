@@ -18,7 +18,7 @@ function dbUrl(): string {
 export const pool = new pg.Pool({
   ...(config.dbUrl ? { connectionString: dbUrl() } : config.db),
   ...(config.dbSsl ? { ssl: { rejectUnauthorized: config.dbSslStrict } } : {}),
-  max: 8, keepAlive: true, keepAliveInitialDelayMillis: 10000,
+  max: 8, keepAlive: true, keepAliveInitialDelayMillis: 10000, connectionTimeoutMillis: 5000, query_timeout: 10000,
 });
 pool.on("error", (e) => console.warn(`[db] idle client error (ignored, the pool reconnects): ${e.message}`));
 

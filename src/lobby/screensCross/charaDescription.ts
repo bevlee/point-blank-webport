@@ -7,8 +7,8 @@ import { charaMaxHp } from "../../gameplay/charaHp.ts";
 import { charaStats } from "../state/charaStats.ts";
 
 const TEAM_BY_PREFIX: Record<number, [key: string, fallback: string]> = {
-  601: ["STR_INVEN_RED_CHARA", "Personagem rebelde"],
-  602: ["STR_INVEN_BLUE_CHARA", "Personagem da OTP"],
+  601: ["STR_INVEN_RED_CHARA", "Red Team character"],
+  602: ["STR_INVEN_BLUE_CHARA", "Blue Team character"],
 };
 
 export function charaDescription(itemId: number, str: (k: string, f: string) => string): string {

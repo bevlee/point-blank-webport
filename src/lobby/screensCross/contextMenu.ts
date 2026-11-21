@@ -26,17 +26,17 @@ export const CMC = {
 
 /** STR key + texto de reserva por comando (strings.json). */
 export const CMC_TEXT: Record<number, [key: string, fallback: string]> = {
-  0: ["STR_TBL_GUI_ETC_CONTEXT_GIVE_MASTER", "Novo dono"],
-  1: ["STR_TBL_GUI_ETC_CONTEXT_FORCE_GET_AWAY", "Forçar saída"],
-  2: ["STR_TBL_GUI_ETC_CONTEXT_PERSONAL_INFO", "Informações pessoais"],
-  3: ["STR_TBL_GUI_ETC_CONTEXT_WHISPER", "PM"],
-  4: ["STR_TBL_GUI_ETC_CONTEXT_INVITE", "Convidar"],
-  5: ["STR_TBL_GUI_ETC_CONTEXT_FIND_OUT", "Buscar"],
-  6: ["STR_TBL_GUI_ETC_CONTEXT_ADD_FRIEND", "Adicionar amigo"],
-  7: ["STR_TBL_GUI_ETC_CONTEXT_CUT_OFF", "Bloquear"],
-  8: ["STR_TBL_GUI_ETC_CONTEXT_CLAN_INVITE", "Convite do Clã"],
-  9: ["STR_TBL_GUI_ETC_CONTEXT_DETAIL_INFO", "Informações"],
-  10: ["STR_TBL_GUI_ETC_CONTEXT_VIEW_ITEM_INFO", "Espionar"],
+  0: ["STR_TBL_GUI_ETC_CONTEXT_GIVE_MASTER", "Change Host"],
+  1: ["STR_TBL_GUI_ETC_CONTEXT_FORCE_GET_AWAY", "Kick"],
+  2: ["STR_TBL_GUI_ETC_CONTEXT_PERSONAL_INFO", "Personal Info"],
+  3: ["STR_TBL_GUI_ETC_CONTEXT_WHISPER", "Whisper"],
+  4: ["STR_TBL_GUI_ETC_CONTEXT_INVITE", "Invite"],
+  5: ["STR_TBL_GUI_ETC_CONTEXT_FIND_OUT", "Locate"],
+  6: ["STR_TBL_GUI_ETC_CONTEXT_ADD_FRIEND", "Add Friend"],
+  7: ["STR_TBL_GUI_ETC_CONTEXT_CUT_OFF", "Block"],
+  8: ["STR_TBL_GUI_ETC_CONTEXT_CLAN_INVITE", "Invite Clan"],
+  9: ["STR_TBL_GUI_ETC_CONTEXT_DETAIL_INFO", "Detailed Info"],
+  10: ["STR_TBL_GUI_ETC_CONTEXT_VIEW_ITEM_INFO", "View Item Info"],
 };
 
 /** clã: 0xFFFFFFFF = sem clã (gameServer.ts GetClan(0), a logo do clã). Lobby e slot usam o mesmo valor. */

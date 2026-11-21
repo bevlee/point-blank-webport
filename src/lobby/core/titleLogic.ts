@@ -4,7 +4,7 @@
 // client's own STR_TBL_DESIGNATION_* / STR_HEADER_* (pt-BR.json); Lua flow of the scene: PointBlankRe_MyInfomation_Designation.lua.
 import { tOr } from "../ui/i18n.ts";
 import { cleanLabel } from "../screens/strings.ts";
-import { AUTHORITY_EFFECTS, EFFECTS, TITLES, type TitleDef } from "./titleData.ts";
+import { AUTHORITY_EFFECTS, EFFECTS, TITLES, TITLE_WEAPON_ITEMS, type TitleDef } from "./titleData.ts";
 
 export const TITLE_COUNT = TITLES.length;
 /** equip slots of the profile (i3UIButtonMySlot1..3); `slots` of the account says how many are unlocked */
@@ -63,13 +63,13 @@ export function effectText(id: number): string {
 }
 
 /** AuthWeaponClass / Number -> item id (Dragunov G = class 5, number 6 = 105006, which is also its server award) */
-export const weaponItemId = (cls: number, num: number): number => 100000 + cls * 1000 + num;
+export const weaponItemId = (cls: number, num: number): number => TITLE_WEAPON_ITEMS[`${cls}:${num}`] ?? 100000 + cls * 1000 + num;
 export function weaponText(cls: number, num: number, nameOf: (itemId: number) => string): string {
   const name = nameOf(weaponItemId(cls, num));
-  return name ? cleanLabel(tOr("STR_HEADER_AUTHORITY_WEAPON", "%s").replace("%s", name)) : "";
+  return name ? cleanLabel(tOr("STR_HEADER_AUTHORITY_WEAPON", "%s License").replace("%s", name)) : "";
 }
 
-const NONE = (n: 1 | 2 | 3): string => cleanLabel(tOr(`STR_TBL_DESIGNATION_NONE_WITH_COLOR${n}`, "Indisponível"));
+const NONE = (n: 1 | 2 | 3): string => cleanLabel(tOr(`STR_TBL_DESIGNATION_NONE_WITH_COLOR${n}`, "Unavailable"));
 const joined = (xs: string[], none: string): string => (xs.length ? xs.join("\n") : none);
 /** Efeito + / Efeito - / Efeito extra rows of a title (i3UIEffectPlus / Minus / Add), UITabProfileDesignation::__UpdateDetailInfoBox
  * 0x950eb0: two slots per row, empty = "Indisponível" (NONE_WITH_COLOR1 / 2 / 3). Extra row, per slot: id 0 or an authority id ->
@@ -91,27 +91,27 @@ export function effectRows(d: TitleDef, nameOf: (itemId: number) => string): { p
 export const titleName2 = (d: TitleDef): string => cleanLabel(tOr(`STR_TBL_DESIGNATION_NAME2_NO${d.set - 1}`, ""));
 
 /** count lines of the badge rows: "Possui %d und." (owned) / "Precisa de %d und." (needed) */
-export const ownedText = (n: number): string => cleanLabel(tOr("STR_TBL_DESIGNATION_APPENDIX_BADGECOUNT_TEXT", "Possui %d und.")).replace("%d", String(n));
-export const neededText = (n: number): string => cleanLabel(tOr("STR_TBL_DESIGNATION_NEEDED_BADGECOUNT_TEXT", "Precisa de %d und.")).replace("%d", String(n));
+export const ownedText = (n: number): string => cleanLabel(tOr("STR_TBL_DESIGNATION_APPENDIX_BADGECOUNT_TEXT", "Owned: %d units")).replace("%d", String(n));
+export const neededText = (n: number): string => cleanLabel(tOr("STR_TBL_DESIGNATION_NEEDED_BADGECOUNT_TEXT", "%d Required")).replace("%d", String(n));
 
 export const TS = {
-  get select() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_SELECT", "Escolha o título")); },
-  get none() { return cleanLabel(tOr("STR_TBL_DESIGNATION_NONE_WITH_COLOR3", "Indisponível")); },
-  get getText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_TEXT", "Adquirir Título")); },
-  get useText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_USE_TEXT", "Usar Título")); },
-  get releaseText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_RELEASE_TEXT", "Cancelar Título")); },
-  get getAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_ANSWER_MESSAGE", "Deseja adquirir o título escolhido?")); },
-  get equipAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_EQUIP_ANSWER_MESSAGE", "Equipar o título escolhido?")); },
-  get releaseAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_RELEASE_ANSWER_MESSAGE", "Deseja cancelar o título escolhido?")); },
-  get noSlot() { return cleanLabel(tOr("STR_TBL_DESIGNATION_NO_SELECTED_SLOT_MESSAGE", "Não foi escolhido slot.")); },
-  get sameClass() { return cleanLabel(tOr("STR_TBL_DESIGNATION_FAIL_ANOTHER_USED", "Já está usando um Título do mesmo tipo.")); },
-  get dupSlot() { return cleanLabel(tOr("STR_TBL_NETWORK_DUPLICATED_DESIGNATION_TYPE", "O título já está sendo usado em outro slot.")); },
-  get notMatch() { return cleanLabel(tOr("STR_TBL_NETWORK_NOT_MATCH_BUY_DESIGNATION", "Condições para compra inadequadas.")); },
-  get noEquipYet() { return cleanLabel(tOr("STR_TBL_GUI_BASE_NO_EQUIP_PRE_DESIGNATION", "Não é possível equipar antes de adquirir o título.")); },
-  get gotIt() { return cleanLabel(tOr("STR_TBL_NETWORK_SUCESS_GET_DESIGNATION", "Obtenção de título realizada com sucesso.")); },
-  get gotPrize() { return cleanLabel(tOr("STR_TBL_NETWORK_SUCESS_GET_DESIGNATION_WITH_PRIZE", "Você recebeu recompensa por ter adquirido o título.")); },
-  get registered() { return cleanLabel(tOr("STR_TBL_NETWORK_REGISTER_DESIGNATION", "O título escolhido foi registrado com êxito.")); },
-  get releaseFail() { return cleanLabel(tOr("STR_TBL_NETWORK_FAIL_RELEASE_DESIGNATION", "Falha no cancelamento de título.")); },
-  get already() { return cleanLabel(tOr("STR_TBL_NETWORK_ALREADY_GET_DESIGNATION", "Já possui este título.")); },
-  get slotHint() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_EXPLAIN_MESSAGE", "Escolha o slot para equipar o título e confirme.")).split("\n")[0]; },
+  get select() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_SELECT", "Please Choose The Title")); },
+  get none() { return cleanLabel(tOr("STR_TBL_DESIGNATION_NONE_WITH_COLOR3", "Unavailable")); },
+  get getText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_TEXT", "Acquire")); },
+  get useText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_USE_TEXT", "Equip")); },
+  get releaseText() { return cleanLabel(tOr("STR_TBL_DESIGNATION_RELEASE_TEXT", "Unequip")); },
+  get getAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_ANSWER_MESSAGE", "Acquire the title selected?")); },
+  get equipAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_EQUIP_ANSWER_MESSAGE", "equip the title selected?")); },
+  get releaseAsk() { return cleanLabel(tOr("STR_TBL_DESIGNATION_RELEASE_ANSWER_MESSAGE", "Unequip the title selected?")); },
+  get noSlot() { return cleanLabel(tOr("STR_TBL_DESIGNATION_NO_SELECTED_SLOT_MESSAGE", "No selected title slot.\nPlease select the slot and click OK.")); },
+  get sameClass() { return cleanLabel(tOr("STR_TBL_DESIGNATION_FAIL_ANOTHER_USED", "Failed to equip since a title of the same type is equipped.")); },
+  get dupSlot() { return cleanLabel(tOr("STR_TBL_NETWORK_DUPLICATED_DESIGNATION_TYPE", "Unable to equip: a title of the same type is already equipped.")); },
+  get notMatch() { return cleanLabel(tOr("STR_TBL_NETWORK_NOT_MATCH_BUY_DESIGNATION", "Requirements for this title have not been met.")); },
+  get noEquipYet() { return cleanLabel(tOr("STR_TBL_GUI_BASE_NO_EQUIP_PRE_DESIGNATION", "You do not meet item requirements.")); },
+  get gotIt() { return cleanLabel(tOr("STR_TBL_NETWORK_SUCESS_GET_DESIGNATION", "Title acquired.")); },
+  get gotPrize() { return cleanLabel(tOr("STR_TBL_NETWORK_SUCESS_GET_DESIGNATION_WITH_PRIZE", "Received a reward for acquiring this title!\n")); },
+  get registered() { return cleanLabel(tOr("STR_TBL_NETWORK_REGISTER_DESIGNATION", "Title equipped.")); },
+  get releaseFail() { return cleanLabel(tOr("STR_TBL_NETWORK_FAIL_RELEASE_DESIGNATION", "Failed to unequip the title.")); },
+  get already() { return cleanLabel(tOr("STR_TBL_NETWORK_ALREADY_GET_DESIGNATION", "The title has already been acquired.")); },
+  get slotHint() { return cleanLabel(tOr("STR_TBL_DESIGNATION_GET_EXPLAIN_MESSAGE", "Select a slot for the title and confirm.")).split("\n")[0]; },
 };

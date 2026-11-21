@@ -9,8 +9,17 @@ import { join } from 'node:path';
 export const COLORS = { 'server': 36, vite: 33, postgres: 34, status: 90, sup: 90 };
 export const color = (name, s) => `\x1b[${COLORS[name] ?? 37}m${s}\x1b[0m`;
 
-/** parses `netstat -ano`, returns pid listening on `port` (IPv4 or IPv6, TCP) or null */
+/** Returns a TCP listener PID using the host platform tools, or null if the port is free. */
 export function pidOnPort(port) {
+  if (process.platform !== 'win32') {
+    try {
+      const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      return Number(out.trim().split('\n')[0]) || null;
+    } catch (error) {
+      if (error.status === 1) return null;
+      throw error;
+    }
+  }
   let text;
   try { text = execFileSync('netstat', ['-ano'], { encoding: 'utf8' }); } catch { return null; }
   const re = new RegExp(`^\\s*TCP6?\\s+\\S*[.:]${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, 'im');
@@ -19,6 +28,10 @@ export function pidOnPort(port) {
 }
 
 export function commandLineOf(pid) {
+  if (process.platform !== 'win32') {
+    try { return execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim(); }
+    catch { return ''; }
+  }
   try {
     const out = execFileSync('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-Command',
@@ -84,6 +97,12 @@ function pebScript() {
 }
 
 export function cwdOf(pid) {
+  if (process.platform !== 'win32') {
+    try {
+      const out = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      return out.split('\n').find((line) => line.startsWith('n'))?.slice(1) || '';
+    } catch { return ''; }
+  }
   try {
     const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', pebScript(), '-ProcId', String(pid)], { encoding: 'utf8' });
     return out.trim();
@@ -99,6 +118,15 @@ export function belongsToRepo(pid, repoKey) {
 }
 
 export function killTree(pid) {
+  if (process.platform !== 'win32') {
+    let children = [];
+    try {
+      children = execFileSync('pgrep', ['-P', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n').filter(Boolean).map(Number);
+    } catch (error) { if (error.status !== 1) throw error; }
+    for (const child of children) killTree(child);
+    try { process.kill(pid, 'SIGTERM'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    return;
+  }
   try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* already gone */ }
 }
 

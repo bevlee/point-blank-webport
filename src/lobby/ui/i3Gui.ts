@@ -9,6 +9,7 @@
 //     (alignment, colour, font, offset, spacing) come from the exe's calls per control, exported as `txt` (TextAttr)
 import { ensureUiFont, FONTS } from "./assets.ts";
 import { GDI_ARIAL } from "./gdiArial.ts";
+import { englishArtworkCaption, styleArtworkCaption } from "./englishArtwork.ts";
 
 /** flip: 1 mirror X | 2 mirror Y inside the piece's rect */
 export type Img = [tex: string, dx: number, dy: number, u: number, v: number, sw: number, sh: number, dw: number, dh: number, flip?: number];
@@ -282,8 +283,12 @@ export class I3Gui {
     }
     // a name used twice (the files repeat separators / captions) maps to the last one built
     this.byName.set(n.name, built);
-    const text = this.o.text?.(n);
-    if (text !== undefined) this.text(el, n, text);
+    const artworkCaption = englishArtworkCaption(n);
+    const text = artworkCaption ?? this.o.text?.(n);
+    if (text !== undefined) {
+      const caption = this.text(el, n, text);
+      if (artworkCaption !== undefined) { caption.dataset.artworkCaption = "en"; styleArtworkCaption(caption, n); }
+    }
     parent.appendChild(el);
     for (const c of n.children ?? []) this.build(c, el);
     return el;
@@ -345,8 +350,10 @@ export class I3Gui {
 
   setState(name: string, i: number): void {
     const b = this.byName.get(name);
-    if (!b?.states.length) return;
+    if (!b) return;
     b.states.forEach((s, k) => (s.style.display = k === Math.min(i, b.states.length - 1) ? "" : "none"));
+    const caption = b.el.querySelector<HTMLElement>(":scope > [data-artwork-caption]");
+    if (caption) styleArtworkCaption(caption, b.node, i, b.el.getAttribute("aria-disabled") === "true");
   }
 
   /**
@@ -420,7 +427,14 @@ export class I3Gui {
     b.el.addEventListener("pointerdown", () => { if (enabled() && b.states.length > 2) this.setState(name, 2); });
     b.el.addEventListener("pointerup", () => { if (enabled()) this.setState(name, 1); });
     b.el.addEventListener("click", (e) => { e.stopPropagation(); if (enabled()) fn(); });
-    return () => { this.setState(name, base()); b.el.style.cursor = enabled() ? "pointer" : "default"; };
+    const repaint = () => {
+      const on = enabled();
+      b.el.setAttribute("aria-disabled", String(!on));
+      this.setState(name, on ? 0 : off);
+      b.el.style.cursor = on ? "pointer" : "default";
+    };
+    repaint();
+    return repaint;
   }
 
   /** an edit box: a transparent <input> over the control's own Edit frame */
@@ -430,7 +444,12 @@ export class I3Gui {
     const input = document.createElement("input");
     input.type = o.password ? "password" : "text";
     if (o.maxLength) input.maxLength = o.maxLength;
-    input.style.cssText = `position:absolute;left:3px;top:0;width:${b.node.w - 6}px;height:${b.node.h}px;box-sizing:border-box;padding:0;border:0;outline:0;background:transparent;`
+    // Native edit controls can contain a trailing action button (room-title Change).
+    // Leave its hit area outside the HTML input that is appended above the native children.
+    const end = Math.min(b.node.w - 3, ...(b.node.children ?? [])
+      .filter(n => n.cls === "Button" && n.x > b.node.w / 2 && n.y < b.node.h && n.y + n.h > 0)
+      .map(n => n.x));
+    input.style.cssText = `position:absolute;left:3px;top:0;width:${Math.max(0, end - 3)}px;height:${b.node.h}px;box-sizing:border-box;padding:0;border:0;outline:0;background:transparent;`
       + `font:${nodeFont(b.node).css};color:${b.node.txt?.color ?? "#e4e4e4"};text-shadow:${shadowCss(b.node)};`;
     input.addEventListener("click", (e) => e.stopPropagation());
     input.addEventListener("keydown", (e) => {

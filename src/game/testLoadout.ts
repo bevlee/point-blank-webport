@@ -40,7 +40,7 @@ export const TEST_WEAPONS: Record<RespawnSlot, readonly { id: number; kind: stri
 
 /** first entry of each slot: the first life of ?play and the respawn panel's starting choice */
 export const TEST_EQUIPPED: RespawnLoadout = {
-  primary: TEST_WEAPONS.primary[0].id,
+  primary: typeof location !== "undefined" && new URLSearchParams(location.search).has("m4camo") ? 103010 : TEST_WEAPONS.primary[0].id,
   secondary: TEST_WEAPONS.secondary[0].id,
   melee: TEST_WEAPONS.melee[0].id,
   grenade: TEST_WEAPONS.grenade[0].id,

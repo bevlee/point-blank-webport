@@ -272,7 +272,7 @@ test("anti-cheat is on by default; ItemStatistics + pef in matchData.json", () =
   assert.equal(DEFAULT_CONFIG.fireRateCap, true);
   assert.ok(DEFAULT_CONFIG.strikeLimit > 1, "never on the first rejection");
   assert.deepEqual([ST[K2].damage, ST[K2].fireDelay], [27, 0.075]);
-  assert.equal(ST[CHEYTAC].damageMax, 173, "pef Damage above the XML 95");
+  assert.ok(ST[CHEYTAC].damageMax! > ST[CHEYTAC].damage, "the active client's pef maximum exceeds the XML base");
   assert.equal(ST[SHOTGUN].hits, 8);
   assert.equal(ST[UZI].hits, 2, "DualSMG: both guns every shot");
   assert.equal(mapData.weaponGroup![702001001], mapData.weaponGroup![M7], "battle.ts WEAPON_IDS M-7 = the knife's name group");
@@ -285,11 +285,13 @@ test("(a) damage: honest maximum passes, inflated damage is dropped", () => {
   assert.equal(b.hits(0, { victim: 1, damage: 36, weapon: K2 }).length, 1);
   assert.equal(b.hits(0, { victim: 1, damage: 37, weapon: K2 }).length, 0);
   assert.equal(b.hits(0, { victim: 1, damage: 2047, weapon: K2 }).length, 0);
-  // head: CalcHeadShotDamage <= 255
-  assert.equal(b.hits(0, { victim: 1, damage: 200, part: 14, weapon: K2 }).length, 1);
-  assert.equal(b.hits(0, { victim: 1, damage: 256, part: 14, weapon: K2 }).length, 0);
-  // Cheytac body 173 x 1.2 = 208 (XML 95: the original would have dropped it), M-7 RMB 90 x 1.2 = 108 (XML 60)
-  assert.equal(b.hits(1, { victim: 0, damage: 208, weapon: CHEYTAC }).length, 1);
+  // Headshots are bounded by 1.5x weapon damage.
+  assert.equal(b.hits(0, { victim: 1, damage: 41, part: 14, weapon: K2 }).length, 1);
+  assert.equal(b.hits(0, { victim: 1, damage: Math.round((ST[K2].damageMax ?? ST[K2].damage) * 1.5) + 1, part: 14, weapon: K2 }).length, 0);
+  // Cross and Portable have different pef maxima. Exercise the active table's exact boundary, not Cross's 173.
+  const sniperMax = Math.trunc((ST[CHEYTAC].damageMax ?? ST[CHEYTAC].damage) * 1.2 * 1.1 + 0.5);
+  assert.equal(b.hits(1, { victim: 0, damage: sniperMax, weapon: CHEYTAC }).length, 1);
+  assert.equal(b.hits(1, { victim: 0, damage: sniperMax + 1, weapon: CHEYTAC }).length, 0);
   assert.equal(b.hits(1, { victim: 0, damage: 108, weapon: M7 }).length, 1);
   assert.equal(b.hits(1, { victim: 0, damage: 130, weapon: M7 }).length, 0);
   assert.ok(b.warns.some((l) => /slot 0: hit 37 part 1 with 103004/.test(l)), b.warns.join("\n"));
@@ -324,12 +326,13 @@ test("(b) loadout: the RESPAWN's items (by name group), Dual swap, defaults and 
   assert.equal(b.hits(1, { victim: 0, damage: 100, weapon: CHEYTAC }).length, 1, "slot 2's dropped Cheytac, picked up");
 });
 
-test("(b) Champion Claymore 407113 has its own ItemStatistics row: its grenade hits pass in the explosive slot, over-damage is dropped", () => {
-  const CHAMPION = 407113;
-  assert.equal(ST[CHAMPION]?.damage, 65, "row of the 2017 base 407023");
+test("(b) the active client's Claymore hits pass in the explosive slot and over-damage is dropped", () => {
+  const claymore = ST[407113] ? 407113 : 407023;
+  assert.equal(ST[claymore]?.damage, 65, "the exported Claymore base damage");
   const b = new Bench();
-  b.join(0); b.join(1, { explosive: CHAMPION }); b.join(2);
-  assert.equal(b.hits(1, { victim: 0, damage: 65, weapon: CHAMPION }).length, 1, "Champion 65 hits the slot's Claymore");
+  b.join(0); b.join(1, { explosive: claymore }); b.join(2);
+  assert.equal(b.hits(1, { victim: 0, damage: 65, weapon: claymore }).length, 1);
+  assert.equal(b.hits(1, { victim: 0, damage: 2047, weapon: claymore }).length, 0);
 });
 
 test("(b) a guest's record for another slot is dropped; the host's AI seats pass (and are checked)", () => {

@@ -2,6 +2,7 @@
 // row of system_servers), GameClient.ProcessPacket dispatch, USER_ENTER, SELECT_CHANNEL, lobby, inventory, equip and
 // shop. Rooms/battle live in ./roomHandlers.ts. Wire format identical to the .NET GameClient (tcpSession.ts).
 import net from "node:net";
+import { equipmentPurchaseAllowed } from "../shared/equipmentShop.ts";
 import { PacketWriter, type PacketReader } from "../../../src/net/packet.ts";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -423,6 +424,7 @@ async function buyCart(c: GameClient, p: Account, cart: Cart): Promise<void> {
   if (p.inventory.items.length >= 1500) return fail(0x800010b9);
   const res = ph.getGoods(cart);
   if (!res) return fail(0x80001017);
+  if (!equipmentPurchaseAllowed(p.rank, res.goods, p.inventory.items)) return fail(0x80001019);
   if (!pg.preflightSeasonGoods(p, res.goods).ok) return fail(0x80001019);
   let extra = 0;
   for (const g of res.goods.filter((x) => Math.trunc(x.item.id / 100000) === 36 && !pg.isSeasonShopGood(x))) {

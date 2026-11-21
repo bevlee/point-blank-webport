@@ -126,16 +126,16 @@ export function tabLayout(d: HudData, W: number, H: number): PanelLayout {
   const texts: I3Text[] = [];
   const W255: RGB = [255, 255, 255];
   const node = (text: string, x: number, y: number, w: number, color: RGB = W255, ax: 0 | 1 = 1): I3Text => ({ text, x, y, w, h: 24, face: "Arial", size: 10, color, ax, ay: 1 });
-  const dead = tOr("STR_TBL_INGAME_HUD_DEATH_TEXT", "Morto");
+  const dead = tOr("STR_TBL_INGAME_HUD_DEATH_TEXT", "Death");
   // column headers, CHUD_Score create 0x72ee19..0x72f2a5 (proof, PointBlank.exe Cross): 7 nodes per team, +0x17c..+0x1b0 of the
   // 80-node array (created 0x72e9c6, Arial 10, SetAlign 1,1). SetPos (BX + x, BR+81: [ebp-0x18] = H/2 - 0x240/2 - 0xc at 0x72e831, + 0x51 at 0x72ee5d), SetSize (w, 25). Red x 18 / 47 / 76 / 103 / 265 / 300,
   // w 29 / 28 / 28 / 165 / 39 / 55; blue = red + 375 (393 / 422 / 451 / 478 / 640 / 675). Keys (0xbc9e6c.., 0xbc9f74..): ORDER,
   // CLAN, RANK, NICK, KILL, DEATH. Node 7 (+0x1ac / +0x1b0) has an empty string: not drawn. Headers are centred in their own rect.
   const HEADS: { key: string; fb: string; x: number; w: number }[] = [
     { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_ORDER", fb: "Rank", x: 18, w: 29 },
-    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_CLAN", fb: "Clã", x: 47, w: 28 },
-    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_RANK", fb: "Nível", x: 76, w: 28 },
-    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_NICK", fb: "Apelido", x: 103, w: 165 },
+    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_CLAN", fb: "Clan", x: 47, w: 28 },
+    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_RANK", fb: "Level", x: 76, w: 28 },
+    { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_NICK", fb: "Nickname", x: 103, w: 165 },
     { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_KILL", fb: "KILL", x: 265, w: 39 },
     { key: "STR_TBL_INGAME_HUD_SCORE_TEXT_DEATH", fb: "DEATH", x: 300, w: 55 },
   ];

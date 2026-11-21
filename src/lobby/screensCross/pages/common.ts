@@ -212,9 +212,9 @@ export function setGauge(gui: I3Gui, name: string, v: number): void {
  */
 export function statTexts(prefix: string, bullet: string, range: string): Texts {
   const k: Record<string, [string, string]> = {
-    Damage: ["STR_POPUP_DAMAGE", "Dano"], Rapid: ["STR_POPUP_RAPID_RATE", "Vel. de disparo"], HitRate: ["STR_POPUP_HIT_RATE", "Precisão"],
-    VertRecoil: ["STR_POPUP_WEAPON_VERT_RECOIL", "Recuo vertical"], HorzRecoil: ["STR_POPUP_WEAPON_HORZ_RECOIL", "Recuo horizontal"], Speed: ["STR_SHOP_FILTER_SPEED", "Mobilidade"],
-    Bullet: [bullet, "Munição"], Range: [range, "Alcance"],
+    Damage: ["STR_POPUP_DAMAGE", "Damage"], Rapid: ["STR_POPUP_RAPID_RATE", "Rapid Rate"], HitRate: ["STR_POPUP_HIT_RATE", "Accuracy"],
+    VertRecoil: ["STR_POPUP_WEAPON_VERT_RECOIL", "V.Recoil"], HorzRecoil: ["STR_POPUP_WEAPON_HORZ_RECOIL", "H.Recoil"], Speed: ["STR_SHOP_FILTER_SPEED", "Mobility"],
+    Bullet: [bullet, "Ammo"], Range: [range, "Range"],
   };
   return Object.fromEntries(Object.entries(k).map(([row, t]) => [`${prefix}${row}Key`, t]));
 }
@@ -251,8 +251,8 @@ export class WeaponDetail {
 
   private constructor(private ctx: PageCtx, root: GNode) {
     const gui = (this.gui = pageGui(ctx, {
-      weExtensionCaption: ["STR_POPUP_DETAIL_INFO", "Informações"],
-      ...statTexts("we", "STR_POPUP_BULLETS", "STR_POPUP_WEAPON_RANGE"), weSpeedKey: ["STR_POPUP_WEAPON_SPEED", "Vel. de movimento"],
+      weExtensionCaption: ["STR_POPUP_DETAIL_INFO", "Detailed Info"],
+      ...statTexts("we", "STR_POPUP_BULLETS", "Ammo"), weSpeedKey: ["STR_POPUP_WEAPON_SPEED", "M.Speed"],
     }));
     buildWindows(gui, ctx, root, ["weExtensionWin"]);
     for (const n of ["weExtension", "weExtensionDummy", "weSeparate2", "weSeparate3"]) gui.hide(n);
@@ -324,10 +324,10 @@ export const ownedRepairable = (s: MetaSession, itemId: number): InventoryItem |
 export function askRepair(ctx: PageCtx, it: InventoryItem): void {
   const c = ctx.ctl, s = c.session, str = ctx.str, info = s ? repairCost(s, it) : null;
   if (!s || !info || c.busy) return;
-  if (info.damage <= 0) return c.say(str("STR_POPUP_REPAIR_NEEDLESS", "Não há necessidade de reparar essa arma."), true);
+  if (info.damage <= 0) return c.say(str("STR_POPUP_REPAIR_NEEDLESS", "Selected weapon doesn't need to be repaired."), true);
   const w = c.chrome();
-  if ((info.currency === "gold" ? w.gold : w.cash) < info.cost) return c.say(str("STR_POPUP_REPAIR_3", "Gold insuficiente para reparar."), true);
-  c.msg = { text: str("STR_POPUP_REPAIR_1", "Deseja reparar?"), onOk: () => void repair(ctx, s, it.objectId), onCancel: () => {} };
+  if ((info.currency === "gold" ? w.gold : w.cash) < info.cost) return c.say(str("STR_POPUP_REPAIR_3", "Item cannot be repaired due to insufficient funds."), true);
+  c.msg = { text: str("STR_POPUP_REPAIR_1", "Do you want to get it repaired?"), onOk: () => void repair(ctx, s, it.objectId), onCancel: () => {} };
   c.draw();
 }
 
@@ -343,10 +343,10 @@ async function repair(ctx: PageCtx, s: MetaSession, objectId: number): Promise<v
     r.readD(); r.readD();
     const cash = r.readD(), gold = r.readD(), wallet = s.player.state.wallet;
     s.player.dispatch({ type: "wallet", wallet: { gold, cash, tags: wallet?.tags ?? 0 } });
-    c.say(str("STR_POPUP_REPAIR_SUCCESS", "O reparo foi realizado."), true);
+    c.say(str("STR_POPUP_REPAIR_SUCCESS", "Repair succeeded"), true);
   } catch (e) {
     console.warn("[cross] repair", e);
-    c.say(str("STR_POPUP_REPAIR_FAIL", "Falha no reparo"), true);
+    c.say(str("STR_POPUP_REPAIR_FAIL", "Repair failed"), true);
   }
   c.draw();
 }
@@ -369,6 +369,7 @@ export function setTab(gui: I3Gui, name: string, open: boolean): void {
   if (b.states.length) { gui.setState(name, open ? 1 : 0); return; }
   const pieces = Array.from(b.el.children).filter((e) => !e.classList.contains("op-text")) as HTMLElement[];
   pieces.forEach((p, i) => (p.style.display = i === (open ? 1 : 0) ? "" : "none"));
+  gui.setState(name, open ? 1 : 0);
 }
 
 /** the control's text right-aligned in its box */

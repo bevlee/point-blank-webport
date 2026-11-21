@@ -21,62 +21,62 @@ const MAKE_SHOWN = ["Name", "State", "MatchType", "MatchMember", "Join"];
 const MAKE_HIDDEN = ["Locale", "LeaderValue", "LeaderRank", "LeaderNick"];
 /** team state text: MatchState 1 Ready, 2 Play (Invisible is not listed) [INFERIDO: the state strings are the room's own] */
 const TEAM_STATE: Record<number, [string, string]> = {
-  1: ["STR_POPUP_READY_STATE", "Aguardando"],
-  2: ["STBL_IDX_ROOM_STATE_PLAY", "Jogando"],
+  1: ["STR_POPUP_READY_STATE", "Waiting"],
+  2: ["STBL_IDX_ROOM_STATE_PLAY", "Play"],
 };
 /** the errors the server sends (ClanWarErr) and the text per request; anything else takes the request's fallback */
 const ERR_TEXT: Record<number, [string, string]> = {
-  [ClanWarErr.NOT_IN_CLAN]: ["STBL_IDX_CLAN_BATTLE_CANNOT_FIND", "Não é possível identificar o Clã."],
-  [ClanWarErr.ALREADY_IN_TEAM]: ["STBL_IDX_CLAN_BATTLE_ALREADY_TEAM", "Já está cadastrado em um time."],
-  [ClanWarErr.NO_MATCH_ID]: ["STBL_IDX_CLAN_BATTLE_FULL_TEAM", "Servidor está cheio. Não é possível registrar mais times."],
-  [ClanWarErr.NO_SQUAD]: ["STBL_IDX_CLAN_BATTLE_FULL_TEAM", "Servidor está cheio. Não é possível registrar mais times."],
-  [ClanWarErr.NOT_LEADER]: ["STBL_IDX_CLAN_BATTLE_ONLY_LEADER", "Apenas o Líder pode realizar o pedido."],
-  [ClanWarErr.NOT_READY]: ["STBL_IDX_CLAN_BATTLE_CANNOT_CHANGE", "Não é possível alterar a formação do Clã."],
-  [ClanWarErr.NOT_FULL]: ["STBL_IDX_CLAN_BATTLE_NEED_TO_MEMBER", "Não há número de jogadores suficiente para começar o jogo."],
+  [ClanWarErr.NOT_IN_CLAN]: ["STBL_IDX_CLAN_BATTLE_CANNOT_FIND", "Team not located.\n Please try again."],
+  [ClanWarErr.ALREADY_IN_TEAM]: ["STBL_IDX_CLAN_BATTLE_ALREADY_TEAM", "You are already on a team.\n To join a team you must leave your current team."],
+  [ClanWarErr.NO_MATCH_ID]: ["STBL_IDX_CLAN_BATTLE_FULL_TEAM", "Server team limit has been reached.\n No more teams can be registered."],
+  [ClanWarErr.NO_SQUAD]: ["STBL_IDX_CLAN_BATTLE_FULL_TEAM", "Server team limit has been reached.\n No more teams can be registered."],
+  [ClanWarErr.NOT_LEADER]: ["STBL_IDX_CLAN_BATTLE_ONLY_LEADER", "Only the commander can make that request."],
+  [ClanWarErr.NOT_READY]: ["STBL_IDX_CLAN_BATTLE_CANNOT_CHANGE", "Can't change team members."],
+  [ClanWarErr.NOT_FULL]: ["STBL_IDX_CLAN_BATTLE_NEED_TO_MEMBER", "Not enough members to start the game.\n Please check the number of team members."],
 };
 const FALLBACK: Record<string, [string, string]> = {
-  create: ["STBL_IDX_CLAN_BATTLE_FAILED_TEAM", "Não conseguiu cadastrar o time por erro de conexão."],
-  join: ["STBL_IDX_CLAN_BATTLE_FAILED_JOIN", "Não conseguiu participar no time por erro de conexão."],
-  leave: ["STBL_IDX_CLAN_BATTLE_FAIL_OUT_TEAM", "Não conseguiu sair por erro de conexão."],
-  operation: ["STBL_IDX_CLAN_BATTLE_CANNOT_CHANGE", "Não é possível alterar a formação do Clã."],
-  maxPer: ["STBL_IDX_CLAN_BATTLE_CANNOT_ORGANIZE_TEAM", "Não é possível alterar o número de jogadores no time."],
-  matchmake: ["STBL_IDX_CLAN_BATTLE_FAILED_MATCH", "Falhou na partida do clã."],
-  cancel: ["STBL_IDX_CLAN_BATTLE_FAILED_MATCH", "Falhou na partida do clã."],
+  create: ["STBL_IDX_CLAN_BATTLE_FAILED_TEAM", "A network error has prevented team registration.\n Please try it again."],
+  join: ["STBL_IDX_CLAN_BATTLE_FAILED_JOIN", "A network error has prevented you from joining a team.\n Please try again."],
+  leave: ["STBL_IDX_CLAN_BATTLE_FAIL_OUT_TEAM", "A network error prevented you from exiting.\n Please try again."],
+  operation: ["STBL_IDX_CLAN_BATTLE_CANNOT_CHANGE", "Can't change team members."],
+  maxPer: ["STBL_IDX_CLAN_BATTLE_CANNOT_ORGANIZE_TEAM", "Team composition cannot be modified.\nPlease try again after changing team size."],
+  matchmake: ["STBL_IDX_CLAN_BATTLE_FAILED_MATCH", "Could not find a match for your clan.\nPlease try again."],
+  cancel: ["STBL_IDX_CLAN_BATTLE_FAILED_MATCH", "Could not find a match for your clan.\nPlease try again."],
 };
 
 /** Texts of the clan window's battle controls (merged into clan.ts TEXTS) */
 export const BATTLE_TEXTS: Texts = {
-  clanBattleMakeTeamStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_ORGANIZATION_COLON", "Organização:"],
-  clanBattleMakeTeamEntryButton: ["STBL_IDX_CLAN_CREATE_TEAM", "Registrar"],
-  ...Object.fromEntries(Array.from({ length: MAKE_ROWS }, (_, i) => [`clanBattleMakeTeamJoin${i + 1}`, ["STBL_IDX_CLAN_JOIN_TEAM", "Participar"] as [string, string]])),
+  clanBattleMakeTeamStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_ORGANIZATION_COLON", "Build Team :"],
+  clanBattleMakeTeamEntryButton: ["STBL_IDX_CLAN_CREATE_TEAM", "Register Team"],
+  ...Object.fromEntries(Array.from({ length: MAKE_ROWS }, (_, i) => [`clanBattleMakeTeamJoin${i + 1}`, ["STBL_IDX_CLAN_JOIN_TEAM", "Join"] as [string, string]])),
 };
 
 /** Texts of the battle lobby (ClanBattleLobby) */
 const LOBBY_TEXTS: Texts = {
-  clanBattleLobbyMyTeamWinCaption: ["STBL_IDX_CLAN_MY_CLAN_TEAM_LIST", "Lista da equipe"],
-  clanBattleLobbyMyTeamClanNameStatic: ["STBL_IDX_CLAN_NAME", "Nome do clã :"],
-  clanBattleLobbyMyTeamClanRankStatic: ["STBL_IDX_CLAN_RANK", "Classe :"],
-  clanBattleLobbyMyTeamClanPointStatic: ["STBL_IDX_CLAN_POINT", "Pts. de Clã :"],
-  clanBattleLobbyMyTeamTypeStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_ORGANIZATION", "Formação do time"],
-  clanBattleLobbyTeamListCaption: ["STBL_IDX_CLAN_BATTLE_LIST", "Lista de batalhas dos clãs"],
-  clanBattleLobbyTeamListHeadSlotNum: ["STBL_IDX_CLAN_BATTLE_HEADER_NUMBER", "N°"],
-  clanBattleLobbyTeamListHeadClanRank: ["STBL_IDX_CLAN_BATTLE_HEADER_RANK", "Nível"],
-  clanBattleLobbyTeamListHeadClanName: ["STBL_IDX_CLAN_BATTLE_HEADER_NAME", "Nome do clã"],
-  clanBattleLobbyTeamListHeadTeam: ["STBL_IDX_CLAN_BATTLE_HEADER_TEAM", "Time"],
-  clanBattleLobbyTeamListHeadType: ["STBL_IDX_CLAN_BATTLE_HEADER_ORGANIZATION", "Membros"],
+  clanBattleLobbyMyTeamWinCaption: ["STBL_IDX_CLAN_MY_CLAN_TEAM_LIST", "Team List"],
+  clanBattleLobbyMyTeamClanNameStatic: ["STBL_IDX_CLAN_NAME", "Clan Name:"],
+  clanBattleLobbyMyTeamClanRankStatic: ["STBL_IDX_CLAN_RANK", "Clan Class:"],
+  clanBattleLobbyMyTeamClanPointStatic: ["STBL_IDX_CLAN_POINT", "Clan Points:"],
+  clanBattleLobbyMyTeamTypeStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_ORGANIZATION", "Build Team"],
+  clanBattleLobbyTeamListCaption: ["STBL_IDX_CLAN_BATTLE_LIST", "Clan Record"],
+  clanBattleLobbyTeamListHeadSlotNum: ["STBL_IDX_CLAN_BATTLE_HEADER_NUMBER", "No."],
+  clanBattleLobbyTeamListHeadClanRank: ["STBL_IDX_CLAN_BATTLE_HEADER_RANK", "Rank"],
+  clanBattleLobbyTeamListHeadClanName: ["STBL_IDX_CLAN_BATTLE_HEADER_NAME", "Clan Name"],
+  clanBattleLobbyTeamListHeadTeam: ["STBL_IDX_CLAN_BATTLE_HEADER_TEAM", "Team"],
+  clanBattleLobbyTeamListHeadType: ["STBL_IDX_CLAN_BATTLE_HEADER_ORGANIZATION", "Build"],
   clanBattleLobbyTeamListHeadState: ["STBL_IDX_CLAN_BATTLE_HEADER_STATE", "Status"],
-  clanBattleLobbyTeamListSearchStatic: ["STBL_IDX_CLAN_BATTLE_SEARCHING", "Procurar clã"],
-  clanBattleLobbyTeamListInfoStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_INFO", "Informações do time"],
-  clanBattleLobbyTeamListViewAll: ["STBL_IDX_CLAN_VIEW_ALL", "Ver todos"],
-  clanBattleLobbyClanInfoTeamLeaderStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_LEADER", "Líder do time:"],
-  clanBattleLobbyClanInfoNameStatic: ["STBL_IDX_CLAN_NAME", "Nome do clã :"],
-  clanBattleLobbyClanInfoMasterStatic: ["STBL_IDX_CLAN_MASTER", "Líder"],
-  clanBattleLobbyClanInfoRankStatic: ["STBL_IDX_CLAN_RANK", "Classe :"],
-  clanBattleLobbyClanInfoStaffStatic: ["STBL_IDX_CLAN_PERSON", "Membros :"],
-  clanBattleLobbyClanInfoAddressStatic: ["STBL_IDX_CLAN_AZIT", "Fórum :"],
-  clanBattleLobbyClanInfoOrderStatic: ["STBL_IDX_CLAN_ORDER", "Nível :"],
-  clanBattleLobbyClanInfoExpStatic: ["STBL_IDX_CLAN_EXP", "Experiência:"],
-  ...Object.fromEntries(Array.from({ length: LIST_ROWS }, (_, i) => [`clanBattleLobbyTeamMatchButton${i + 1}`, ["STBL_IDX_CLAN_JOIN_TEAM", "Participar"] as [string, string]])),
+  clanBattleLobbyTeamListSearchStatic: ["STBL_IDX_CLAN_BATTLE_SEARCHING", "Search Clan"],
+  clanBattleLobbyTeamListInfoStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_INFO", "Info Team"],
+  clanBattleLobbyTeamListViewAll: ["STBL_IDX_CLAN_VIEW_ALL", "View All"],
+  clanBattleLobbyClanInfoTeamLeaderStatic: ["STBL_IDX_CLAN_BATTLE_TEAM_LEADER", "Team Leader:"],
+  clanBattleLobbyClanInfoNameStatic: ["STBL_IDX_CLAN_NAME", "Clan Name:"],
+  clanBattleLobbyClanInfoMasterStatic: ["STBL_IDX_CLAN_MASTER", "Clan Master :"],
+  clanBattleLobbyClanInfoRankStatic: ["STBL_IDX_CLAN_RANK", "Clan Class:"],
+  clanBattleLobbyClanInfoStaffStatic: ["STBL_IDX_CLAN_PERSON", "Members:"],
+  clanBattleLobbyClanInfoAddressStatic: ["STBL_IDX_CLAN_AZIT", "Clan Site:"],
+  clanBattleLobbyClanInfoOrderStatic: ["STBL_IDX_CLAN_ORDER", "Clan Ranking:"],
+  clanBattleLobbyClanInfoExpStatic: ["STBL_IDX_CLAN_EXP", "Clan Exp:"],
+  ...Object.fromEntries(Array.from({ length: LIST_ROWS }, (_, i) => [`clanBattleLobbyTeamMatchButton${i + 1}`, ["STBL_IDX_CLAN_JOIN_TEAM", "Join"] as [string, string]])),
 };
 
 const versus = (n: number): string => `${n}vs${n}`;
@@ -179,7 +179,7 @@ export class ClanBattle {
   }
   private teamName(squad: number): string {
     const naming = this.str(`STBL_IDX_CLAN_BATTLE_TEAM_NAMING_${squad}`, `${squad}`);
-    return this.str("STBL_IDX_CLAN_BATTLE_TEAM_WITHOUT_NUM", "Time %s").replace("%s", naming);
+    return this.str("STBL_IDX_CLAN_BATTLE_TEAM_WITHOUT_NUM", "%s Team").replace("%s", naming);
   }
   private stateText(state: number): string { const t = TEAM_STATE[state]; return t ? this.str(...t) : ""; }
 
@@ -274,7 +274,7 @@ export class ClanBattle {
   }
 
   private askLeave(): void {
-    this.ctx.ctl.msg = { text: this.str("STBL_IDX_CLAN_BATTLE_LEAVE_Q", "Caso saia, não será possível participar do time novamente. Tem certeza que deseja sair?"), onOk: () => void this.leave(), onCancel: () => {} };
+    this.ctx.ctl.msg = { text: this.str("STBL_IDX_CLAN_BATTLE_LEAVE_Q", "You cannot rejoin your team after the battle starts. \n Do you still want to exit?"), onOk: () => void this.leave(), onCancel: () => {} };
     this.draw();
   }
 
@@ -295,7 +295,7 @@ export class ClanBattle {
   private async setOperation(text: string): Promise<void> {
     const c = this.api();
     if (!c || !this.team) return;
-    if (!this.isLeader()) { this.say(this.str("STBL_IDX_CLAN_BATTLE_MODIFY_ONLY_LEADER", "Apenas o Líder pode alterar.")); return; }
+    if (!this.isLeader()) { this.say(this.str("STBL_IDX_CLAN_BATTLE_MODIFY_ONLY_LEADER", "Only the team leader can make changes.")); return; }
     const r = await c.setOperation(text);
     if (r.ok && r.data !== undefined) this.operation = r.data;
     else this.say(this.failText("operation", r.err));
@@ -306,7 +306,7 @@ export class ClanBattle {
   private async setMaxPer(max: number): Promise<void> {
     const c = this.api();
     if (!c || !this.team) return;
-    if (!this.isLeader()) { this.say(this.str("STBL_IDX_CLAN_BATTLE_MODIFY_ONLY_LEADER", "Apenas o Líder pode alterar.")); return; }
+    if (!this.isLeader()) { this.say(this.str("STBL_IDX_CLAN_BATTLE_MODIFY_ONLY_LEADER", "Only the team leader can make changes.")); return; }
     const r = await c.setMaxPer(max);
     if (r.ok && r.data !== undefined && this.team) this.team = { ...this.team, capacity: r.data };
     else this.say(this.failText("maxPer", r.err));
@@ -332,7 +332,7 @@ export class ClanBattle {
         if (r.ok) this.queued = false; else this.say(this.failText("cancel", r.err));
       } else {
         const r = await c.matchmake();
-        if (r.ok) { this.queued = true; this.say("Aguardando partida do clã."); } else this.say(this.failText("matchmake", r.err));
+        if (r.ok) { this.queued = true; this.say("Waiting for the clan match."); } else this.say(this.failText("matchmake", r.err));
       }
     } catch (e) { console.warn("[cross] clan battle match", e); this.say(this.failText("matchmake", 0)); }
     finally { this.busy = false; this.draw(); }

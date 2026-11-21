@@ -84,7 +84,7 @@ export function rankIcon(rank: number): HTMLElement {
   const box = el("div");
   const x = (rank % RANK_PER_ROW) * RANK_CELL, y = Math.floor(rank / RANK_PER_ROW) * RANK_CELL;
   box.style.cssText = `width:20px;height:20px;flex:none;position:relative;background:url(${UI_BASE}/cross/atlas/interface_level_icon.png) -${x}px -${y}px no-repeat`;
-  box.title = `Patente ${rank}`;
+  box.title = `Rank ${rank}`;
   return box;
 }
 
@@ -203,11 +203,11 @@ export class ModerationPopup extends Modal {
   private submitBtn!: HTMLElement;
 
   private constructor(private d: ModerationDeps, readonly mode: ModerationMode) {
-    super(d.host, d.input, mode === "report" ? "Denunciar jogador" : mode === "vote" ? tOr("STR_POPUP_FORCIBLYREMOVE_TITLE", "Votação de expulsão") : "Votação de novo líder");
-    const who = mode === "leader" ? "Novo líder" : "Jogador";
+    super(d.host, d.input, mode === "report" ? "Report player" : mode === "vote" ? tOr("STR_POPUP_FORCIBLYREMOVE_TITLE", "Kick vote") : "New host vote");
+    const who = mode === "leader" ? "New host" : "Player";
     this.section(who, this.list);
     if (mode === "leader") {
-      const n = el("div", "pbm-n", `Sem escolher ninguém, o voto é para o jogador com melhor ping. Precisa de pelo menos ${LEADER_MIN_HUMANS} jogadores e maioria simples em 20 s.`);
+      const n = el("div", "pbm-n", `With nobody selected, the vote targets the player with the best ping. Requires at least ${LEADER_MIN_HUMANS} players and a simple majority within 20 s.`);
       this.body.appendChild(n);
     } else {
       const seg = el("div", "pbm-seg");
@@ -217,27 +217,27 @@ export class ModerationPopup extends Modal {
         this.seg.push(b);
         seg.appendChild(b);
       };
-      mk("Chat / mau comportamento", 0);
-      mk(tOr("STR_POPUP_FORCIBLYREMOVE_REASON_ILLEGALPROGRAM", "Uso de hack"), 1);
-      this.section(tOr("STR_POPUP_FORCIBLYREMOVE_REASON_NOMANNER", "Motivo"), seg);
+      mk("Chat / misconduct", 0);
+      mk(tOr("STR_POPUP_FORCIBLYREMOVE_REASON_ILLEGALPROGRAM", "Use of Illegal Program"), 1);
+      this.section(tOr("STR_POPUP_FORCIBLYREMOVE_REASON_NOMANNER", "Rude Behavior"), seg);
     }
     if (mode === "report") {
       this.detail = el("input", "pbm-in");
       this.detail.type = "text"; this.detail.maxLength = DETAIL_MAX; this.detail.autocomplete = "off"; this.detail.spellcheck = false;
-      this.detail.placeholder = "Opcional: o que aconteceu";
+      this.detail.placeholder = "Optional: what happened?";
       this.detail.addEventListener("input", () => { this.count.textContent = `${this.detail!.value.length}/${DETAIL_MAX}`; });
       this.detail.addEventListener("keydown", (e) => { if (e.key === "Enter") void this.submit(); });
-      const s = this.section("Detalhe", this.detail);
+      const s = this.section("Details", this.detail);
       s.querySelector(".pbm-l")!.appendChild(this.count);
       const chk = this.chk = el("div", "pbm-chk");
-      chk.append(el("b", "", "✓"), el("span", "", "Abrir também uma votação de expulsão"));
+      chk.append(el("b", "", "✓"), el("span", "", "Also start a kick vote"));
       chk.addEventListener("click", () => { this.alsoVote = !this.alsoVote; chk.classList.toggle("on", this.alsoVote); });
       this.body.appendChild(chk);
-      this.body.appendChild(el("div", "pbm-n", "Em denúncia de chat, GMs online recebem as últimas mensagens da partida. Denúncia falsa ou sem motivo pode restringir quem denunciou."));
+      this.body.appendChild(el("div", "pbm-n", "For chat reports, online GMs receive recent match messages. False or unsupported reports may result in restrictions for the reporter."));
     }
     this.body.appendChild(this.status);
-    this.submitBtn = this.button(mode === "report" ? "Denunciar" : "Iniciar votação", false, () => void this.submit());
-    this.button(tOr("STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancelar"), true, () => this.close());
+    this.submitBtn = this.button(mode === "report" ? "Report" : "Start vote", false, () => void this.submit());
+    this.button(tOr("STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancel"), true, () => this.close());
   }
 
   static async create(d: ModerationDeps, mode: ModerationMode): Promise<ModerationPopup> {
@@ -258,9 +258,9 @@ export class ModerationPopup extends Modal {
     const roster = this.d.roster().filter((p) => p.slot !== me && p.slot !== lead && p.slot >= 0 && p.slot < 16).sort((a, b) => a.slot - b.slot);
     this.list.textContent = "";
     this.pick = this.mode === "leader" ? BEST_PING : -2;
-    if (this.mode === "leader") this.list.appendChild(this.chip(BEST_PING, "Melhor ping (automático)", "#8be08b", true));
+    if (this.mode === "leader") this.list.appendChild(this.chip(BEST_PING, "Best ping (automatic)", "#8be08b", true));
     for (const p of roster) this.list.appendChild(this.chip(p.slot, p.nick, teamColor(p.slot), false, p.rank));
-    if (!roster.length && this.mode !== "leader") this.list.appendChild(el("div", "pbm-n wide", "Nenhum outro jogador na partida."));
+    if (!roster.length && this.mode !== "leader") this.list.appendChild(el("div", "pbm-n wide", "No other players in the match."));
     if (preselect >= 0 && roster.some((p) => p.slot === preselect)) this.choose(preselect);
     else if (this.mode !== "leader" && roster.length === 1) this.choose(roster[0].slot);
     else this.paintPick();
@@ -285,8 +285,8 @@ export class ModerationPopup extends Modal {
   private paintPick(): void {
     for (const c of Array.from(this.list.children) as HTMLElement[]) c.classList.toggle("on", c.dataset.slot === String(this.pick));
     this.submitBtn.classList.toggle("off", this.mode !== "leader" && this.pick < 0);
-    if (this.mode !== "leader" && this.pick < 0 && !this.status.textContent) this.say("Escolha o jogador.");
-    else if (this.pick >= 0 && this.status.textContent === "Escolha o jogador.") this.say("");
+    if (this.mode !== "leader" && this.pick < 0 && !this.status.textContent) this.say("Choose a player.");
+    else if (this.pick >= 0 && this.status.textContent === "Choose a player.") this.say("");
   }
 
   private paintKind(): void {
@@ -299,52 +299,52 @@ export class ModerationPopup extends Modal {
       const c = await this.d.chat.reportCondition();
       if (!this.isOpen) return;
       if (!c.canReport) { this.say(errText(c.err)); this.submitBtn.classList.add("off"); }
-    } catch { this.say("Sem resposta do servidor."); }
+    } catch { this.say("No response from server."); }
   }
 
   private async submit(): Promise<void> {
     if (this.busy) return;
     if (this.mode === "leader") return this.submitLeader();
     const target = this.d.roster().find((p) => p.slot === this.pick);
-    if (!target) { this.say("Escolha o jogador."); return; }
+    if (!target) { this.say("Choose a player."); return; }
     if (this.mode === "vote") {
-      if (!this.enoughHumans(KICK_MIN_HUMANS)) { this.say(`Votação de expulsão precisa de pelo menos ${KICK_MIN_HUMANS} jogadores humanos na partida.`); return; }
+      if (!this.enoughHumans(KICK_MIN_HUMANS)) { this.say(`Kick voting requires at least ${KICK_MIN_HUMANS} human players in the match.`); return; }
       this.startVote(target.slot); this.close(); return;
     }
     this.busy = true;
-    this.say("Enviando…", true);
+    this.say("Sending…", true);
     try {
       const err = await this.d.chat.report(target.nick, this.kind, this.detail?.value ?? "");
       if (err !== 0) { this.say(errText(err)); this.busy = false; return; }
       if (this.alsoVote) {
         if (this.enoughHumans(KICK_MIN_HUMANS)) this.startVote(target.slot);
-        else this.d.chat.system(`Votação de expulsão não aberta: precisa de pelo menos ${KICK_MIN_HUMANS} jogadores humanos na partida.`);
+        else this.d.chat.system(`Kick vote not started: requires at least ${KICK_MIN_HUMANS} human players in the match.`);
       }
-      this.d.chat.system(`Denúncia enviada: ${target.nick}.`);
+      this.d.chat.system(`Report submitted: ${target.nick}.`);
       this.busy = false;
       this.close();
-    } catch { this.say("Sem resposta do servidor."); this.busy = false; }
+    } catch { this.say("No response from server."); this.busy = false; }
   }
 
   private enoughHumans(n: number): boolean { return this.d.roster().length >= n; }
 
   private submitLeader(): void {
-    if (!this.enoughHumans(LEADER_MIN_HUMANS)) { this.say(`Votação de líder precisa de pelo menos ${LEADER_MIN_HUMANS} jogadores humanos na partida.`); return; }
-    if (this.d.voteRunning()) { this.say(tOr("STR_ACK_FORCIBLYREMOVE_START_FAIL_ALREADY", "Outra votação já está em andamento.")); return; }
+    if (!this.enoughHumans(LEADER_MIN_HUMANS)) { this.say(`Host voting requires at least ${LEADER_MIN_HUMANS} human players in the match.`); return; }
+    if (this.d.voteRunning()) { this.say(tOr("STR_ACK_FORCIBLYREMOVE_START_FAIL_ALREADY", "Vote Canceled: Another vote in progress.")); return; }
     try { this.d.votes()?.startLeader(this.pick >= 0 ? this.pick : 255); } catch (e) { console.warn("[vote] start leader", e); }
     this.close();
   }
 
   private startVote(slot: number): void {
-    if (this.d.voteRunning()) { this.d.chat.system(tOr("STR_ACK_FORCIBLYREMOVE_START_FAIL_ALREADY", "Outra votação já está em andamento.")); return; }
+    if (this.d.voteRunning()) { this.d.chat.system(tOr("STR_ACK_FORCIBLYREMOVE_START_FAIL_ALREADY", "Vote Canceled: Another vote in progress.")); return; }
     try { this.d.votes()?.startKick(slot, this.kind === 1 ? KickReason.HACK : KickReason.CHAT); } catch (e) { console.warn("[vote] start", e); }
   }
 }
 
 function errText(err: number): string {
-  if (err === ERR_REPORT_NO_TICKET) return "Você não tem denúncias disponíveis.";
-  if (err === ERR_REPORT_RANK) return "Patente baixa demais para denunciar.";
-  return "Não foi possível enviar a denúncia.";
+  if (err === ERR_REPORT_NO_TICKET) return "You have no reports available.";
+  if (err === ERR_REPORT_RANK) return "Your rank is too low to submit a report.";
+  return "Could not submit the report.";
 }
 
 // ---- bug report ----------------------------------------------------------------------------------------------------------
@@ -366,17 +366,17 @@ export class BugPopup extends Modal {
   private sendBtn!: HTMLElement;
 
   private constructor(private d: BugDeps) {
-    super(d.host, d.input, "Reportar bug");
+    super(d.host, d.input, "Report a bug");
     this.area.maxLength = BUG_MAX;
     this.area.spellcheck = false;
-    this.area.placeholder = "O que aconteceu e como repetir?";
+    this.area.placeholder = "What happened, and how can it be reproduced?";
     this.area.addEventListener("input", () => { this.count.textContent = `${this.area.value.length}/${BUG_MAX}`; this.sendBtn.classList.toggle("off", !this.area.value.trim()); });
-    const s = this.section("Descrição", this.area);
+    const s = this.section("Description", this.area);
     s.querySelector(".pbm-l")!.appendChild(this.count);
-    this.body.appendChild(el("div", "pbm-n", "O relatório leva automaticamente sua versão, navegador, FPS, ping, mapa e os últimos erros do console. Nunca senhas nem tokens."));
+    this.body.appendChild(el("div", "pbm-n", "The report automatically includes your version, browser, FPS, ping, map and recent console errors. Passwords and tokens are excluded."));
     this.body.appendChild(this.status);
-    this.sendBtn = this.button("Enviar", false, () => void this.submit());
-    this.button(tOr("STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancelar"), true, () => this.close());
+    this.sendBtn = this.button("Send", false, () => void this.submit());
+    this.button(tOr("STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancel"), true, () => this.close());
   }
 
   static async create(d: BugDeps): Promise<BugPopup> {
@@ -399,9 +399,9 @@ export class BugPopup extends Modal {
     const t = this.area.value.trim();
     if (this.busy || !t) return;
     this.busy = true;
-    this.say("Enviando…", true);
+    this.say("Sending…", true);
     let msg: string;
-    try { msg = await this.d.send(t); } catch { msg = "Não foi possível enviar o relatório."; }
+    try { msg = await this.d.send(t); } catch { msg = "Could not submit the report."; }
     const ok = /enviado|#\d+/i.test(msg);
     this.say(msg, ok);
     this.busy = false;

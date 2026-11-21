@@ -93,6 +93,8 @@ export class SlotModel {
    * the battle packets of this slot rejected in this match, and the last guard log line (rate limit) */
   deathAt = 0;
   respawnTimer: ReturnType<typeof setTimeout> | null = null;
+  /** [web] RESPAWNs still on the way for lives a DEATH_REQ already ended (respawn modes, handleDeath): dropped when they come */
+  staleRespawns = 0;
   strikes = 0;
   guardLogAt = 0;
 
@@ -123,7 +125,7 @@ export class SlotModel {
     this.spectator = false; this.repeatLastState = false; this.missionsCompleted = false;
     this.firstRespawn = true; this.missions = null; this.itemUsages = [];
     if (this.respawnTimer) clearTimeout(this.respawnTimer);
-    this.respawnTimer = null; this.deathAt = 0; this.strikes = 0;
+    this.respawnTimer = null; this.deathAt = 0; this.strikes = 0; this.staleRespawns = 0;
     this.ar = [0, 0]; this.smg = [0, 0]; this.sr = [0, 0]; this.sg = [0, 0]; this.mg = [0, 0];
   }
 

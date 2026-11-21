@@ -31,7 +31,7 @@ function ensureStyles(): void {
     .pb-account-input:autofill { background: transparent; }
     .pb-account-btn {
       position: absolute; box-sizing: border-box; margin: 0; padding: 0; border: 1px solid #4a4a4a; border-radius: 2px;
-      background: #161616; color: #8c8c8c; font: bold 12px Arial, sans-serif; letter-spacing: 0.05em; cursor: pointer;
+      background: #161616; color: #8c8c8c; font: bold 11px Arial, sans-serif; letter-spacing: 0.02em; white-space: nowrap; cursor: pointer;
     }
     .pb-account-btn:hover { border-color: #7a7a7a; color: #ddd; }
     .pb-account-btn.active { color: #fff; border-color: #e0a03a; background: #2a2014; }
@@ -59,8 +59,8 @@ export function showAccountScreen(): Promise<AccountSession> {
     stage.design.innerHTML = `
       <input class="pb-account-input" id="pb-acc-username" type="text" autocomplete="username" maxlength="16" style="${ID_RECT}" />
       <input class="pb-account-input" id="pb-acc-password" type="password" autocomplete="current-password" maxlength="64" style="${PW_RECT}" />
-      <button class="pb-account-btn active" id="pb-acc-submit" type="button" style="left:387px;top:552px;width:121px;height:24px">ENTRAR</button>
-      <button class="pb-account-btn" id="pb-acc-mode" type="button" style="left:515px;top:552px;width:121px;height:24px">CADASTRAR</button>
+      <button class="pb-account-btn active" id="pb-acc-submit" type="button" style="left:387px;top:552px;width:121px;height:24px">LOG IN</button>
+      <button class="pb-account-btn" id="pb-acc-mode" type="button" style="left:515px;top:552px;width:121px;height:24px">REGISTER</button>
       <div class="pb-account-error" id="pb-acc-error"></div>
     `;
 
@@ -74,8 +74,8 @@ export function showAccountScreen(): Promise<AccountSession> {
     // [RECRIADO] the original LOGIN box has no register mode: the submit button and the CADASTRAR / VOLTAR switch are ours
     function setMode(next: "login" | "register"): void {
       mode = next;
-      modeBtn.textContent = next === "login" ? "CADASTRAR" : "VOLTAR";
-      submitBtn.textContent = next === "login" ? "ENTRAR" : "CRIAR CONTA";
+      modeBtn.textContent = next === "login" ? "REGISTER" : "BACK";
+      submitBtn.textContent = next === "login" ? "LOG IN" : "CREATE ACCOUNT";
       passwordInput.autocomplete = next === "login" ? "current-password" : "new-password";
       hideError();
     }
@@ -97,16 +97,16 @@ export function showAccountScreen(): Promise<AccountSession> {
       const password = passwordInput.value;
 
       if (!/^[a-zA-Z0-9_]{4,16}$/.test(username)) {
-        showError("Usuário deve ter 4-16 caracteres (letras, números, _)");
+        showError("Username must contain 4–16 characters (letters, numbers, _)");
         return;
       }
       if (password.length < 6) {
-        showError("Senha deve ter ao menos 6 caracteres");
+        showError("Password must contain at least 6 characters");
         return;
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = "AGUARDE...";
+      submitBtn.textContent = "PLEASE WAIT...";
       try {
         const result = mode === "login"
           ? await loginAccount(username, password)
@@ -116,10 +116,10 @@ export function showAccountScreen(): Promise<AccountSession> {
         overlay.remove();
         resolve({ token: tokenToBytes(result.token), username: result.nickname });
       } catch (err) {
-        const message = err instanceof AccountApiError ? err.message : "Falha de conexão com o servidor de contas";
+        const message = err instanceof AccountApiError ? err.message : "Could not connect to the account server";
         showError(message);
         submitBtn.disabled = false;
-        submitBtn.textContent = mode === "login" ? "ENTRAR" : "CRIAR CONTA";
+        submitBtn.textContent = mode === "login" ? "LOG IN" : "CREATE ACCOUNT";
       }
     }
 

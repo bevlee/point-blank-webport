@@ -37,6 +37,8 @@ export function parseIni(text: string): Record<string, Record<string, string>> {
 
 const fileEnv = readEnvFile(path.join(SERVER_DIR, ".env.local"));
 const env = (k: string, d = ""): string => process.env[k] ?? fileEnv[k] ?? d;
+/** Shared lookup so signaling honors server/.env.local just like Auth/Game configuration. */
+export const serverEnv = env;
 // The C# servers run in Docker (TZ=UTC): DateTime.Now there is UTC. Same local clock here (PB_TZ overrides).
 process.env.TZ = env("PB_TZ", "UTC");
 const resolveServerPath = (p: string) => (path.isAbsolute(p) ? p : path.resolve(SERVER_DIR, p));
@@ -91,9 +93,9 @@ export const config = {
   dataDir: DATA_DIR,
   /** PB_DB_URL (postgres://user:pass@host:port/db, e.g. the Supabase pooler) replaces host/port/name/user/pass below. */
   dbUrl: env("PB_DB_URL", ""),
-  /** PB_DB_SSL=1: TLS to Postgres (Supabase, public Cloud SQL); PB_DB_SSL_STRICT=1 also verifies the certificate chain. */
+  /** PB_DB_SSL=1: TLS to Postgres (Supabase, public Cloud SQL); Certificate verification is on unless PB_DB_SSL_STRICT=0. */
   dbSsl: env("PB_DB_SSL", "") === "1",
-  dbSslStrict: env("PB_DB_SSL_STRICT", "") === "1",
+  dbSslStrict: env("PB_DB_SSL_STRICT", "1") === "1",
   db: {
     host: env("PB_DB_HOST", iniGet("Database", "Host", "127.0.0.1").replace(/^localhost$/, "127.0.0.1")),
     port: Number(env("PB_DB_PORT", iniGet("Database", "Port", "5433"))),
@@ -102,15 +104,15 @@ export const config = {
     password: env("PB_DB_PASS", iniGet("Database", "Pass", "postgres")),
   },
   /** TS Auth listener. 39190 is the .NET Auth (Docker); the TS one runs beside it until F6. */
-  authHost: env("PB_TS_AUTH_HOST", "0.0.0.0"),
+  authHost: env("PB_TS_AUTH_HOST", "127.0.0.1"),
   authPort: Number(env("PB_TS_AUTH_PORT", "39290")),
   /** TS Game listeners, one per system_servers game row id 1..3 (.NET uses 39191-39193). */
-  gameHost: env("PB_TS_GAME_HOST", "0.0.0.0"),
+  gameHost: env("PB_TS_GAME_HOST", "127.0.0.1"),
   gamePortBase: Number(env("PB_TS_GAME_PORT_BASE", "39290")),
   /** HTTP/WebSocket front for the browser (web/webServer.ts): /tcp, /signal, /api. */
-  webHost: env("PB_WEB_HOST", "0.0.0.0"),
+  webHost: env("PB_WEB_HOST", "127.0.0.1"),
   webPort: Number(env("PB_WEB_PORT", env("PORT", "8090"))), // PORT: injected by Cloud Run
-  /** extra exact origins allowed by CORS (/api) and the WS upgrade, comma list (prod front, e.g. https://<project>.web.app) */
+  /** exact origins allowed by CORS (/api) and the WS upgrade, comma list (prod front, e.g. https://<project>.web.app) */
   webOrigins: env("PB_WEB_ORIGINS", "").split(",").map((s) => s.trim()).filter(Boolean),
   /** PB_TRUST_PROXY=1: client IP = last X-Forwarded-For entry (appended by the Cloud Run front end), not the socket peer */
   trustProxy: env("PB_TRUST_PROXY", "") === "1",

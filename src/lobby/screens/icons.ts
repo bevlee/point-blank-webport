@@ -6,6 +6,7 @@
 // never another item's picture.
 import { UI_BASE, keepImage } from "../ui/assets.ts";
 import { setIconNames } from "../state/itemNames.ts";
+import { localizeIconArtwork } from "./iconArtworkEnglish.ts";
 
 export interface CrossRect { sheet: string; x: number; y: number; w: number; h: number; status: string; atlas: string; family: string; name?: string; list?: string; match?: string }
 
@@ -62,9 +63,9 @@ export function iconOf(itemId: number): CrossRect | null {
 /** Item class name for the no-icon card (server ItemClass, Plugin.Core/Enums/ItemClass.cs) [RECRIADO]. */
 export function noIconLabel(itemId: number): string {
   const c = Math.floor(itemId / 100000);
-  if (c >= 9 && c <= 14) return ["Uniforme", "Calça", "Luva", "Cinto", "Coldre", "Skin"][c - 9];
-  return ({ 15: "Dino", 16: "Manutenção", 17: "Consumível", 18: "Cupom", 20: "Pontos", 22: "Cartão de missão", 26: "Cartão de missão", 27: "Boina", 28: "Caixa",
-    30: "Acessório", 32: "Emblema", 33: "Emblema", 34: "Cartão de nome", 35: "Cartão de nome", 36: "Passe" } as Record<number, string>)[c] ?? "Item";
+  if (c >= 9 && c <= 14) return ["Uniform", "Trousers", "Gloves", "Belt", "Holster", "Skin"][c - 9];
+  return ({ 15: "Dino", 16: "Maintenance", 17: "Consumable", 18: "Coupon", 20: "Points", 22: "Mission card", 26: "Mission card", 27: "Beret", 28: "Box",
+    30: "Accessory", 32: "Emblem", 33: "Emblem", 34: "Name card", 35: "Name card", 36: "Pass" } as Record<number, string>)[c] ?? "Item";
 }
 
 /**
@@ -85,6 +86,7 @@ export function paintRect(el: HTMLElement, r: CrossRect, bw: number, bh: number)
     backgroundImage: `url("${url}")`, backgroundRepeat: "no-repeat",
     backgroundSize: a ? `${a.w * s}px ${a.h * s}px` : "", backgroundPosition: `${-r.x * s}px ${-r.y * s}px`,
   });
+  localizeIconArtwork(el, r);
 }
 
 /**
@@ -94,10 +96,11 @@ export function paintRect(el: HTMLElement, r: CrossRect, bw: number, bh: number)
  */
 export function paintIcon(el: HTMLElement, itemId: number, bw = el.clientWidth, bh = el.clientHeight): void {
   const r = iconOf(itemId);
+  if (!r) el.querySelectorAll(":scope > .icon-english").forEach(n => n.remove());
   if (r) return paintRect(el, r, bw || r.w, bh || r.h);
   Object.assign(el.style, { left: "0", top: "0", width: "", height: "", backgroundImage: "", backgroundPosition: "", backgroundSize: "" });
   el.classList.remove("pbui-missing");
   el.classList.add("pbui-noicon");
   el.dataset.noicon = noIconLabel(itemId);
-  el.title = `[RECRIADO] sem ícone para ${itemId}`;
+  el.title = `[RECRIADO] no icon for ${itemId}`;
 }

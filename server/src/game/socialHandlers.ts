@@ -76,7 +76,7 @@ export const serverReply = (a: Account | null | undefined, text: string): void =
 /** floodCheck of the connection plus its notice; false = drop the message. */
 function floodGate(c: GameClient, p: Account): boolean {
   const f = floodCheck(c);
-  if (f.notice) serverReply(p, f.justMuted ? `Você enviou mensagens rápido demais: chat silenciado por ${f.mutedFor} s.` : `Chat silenciado por flood (${f.mutedFor} s).`);
+  if (f.notice) serverReply(p, f.justMuted ? `You sent messages too quickly: chat muted for ${f.mutedFor} s.` : `Chat silenciado por flood (${f.mutedFor} s).`);
   return f.ok;
 }
 

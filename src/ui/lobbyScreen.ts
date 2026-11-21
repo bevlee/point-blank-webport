@@ -168,19 +168,19 @@ export class LobbyScreen {
     const gw = el("input", { value: GW_OVERRIDE ? saved("pbweb.gw", defaultServerUrl()) : defaultServerUrl() });
     const user = el("input", { value: saved("pbweb.user", ""), autocomplete: "username" });
     const pass = el("input", { type: "password", value: "", autocomplete: "current-password" });
-    const tok = el("input", { placeholder: "opcional: texto ou b64:<base64>" });
+    const tok = el("input", { placeholder: "optional: text or b64:<base64>" });
     const tokHint = el("div", { class: "sub" });
     const refreshHint = async () => {
       tokHint.textContent = user.value && pass.value
         ? `token web = ${await deriveWebTokenBase64(user.value, pass.value)}  (accounts.token)` : "";
     };
     user.oninput = pass.oninput = () => void refreshHint();
-    const go = el("button", { class: "primary" }, "Entrar");
+    const go = el("button", { class: "primary" }, "Join");
     const form = el("form", {},
-      el("label", {}, "Usuário"), user,
-      el("label", {}, "Senha"), pass,
-      el("details", {}, el("summary", {}, "Avançado"),
-        el("label", {}, "Servidor"), gw,
+      el("label", {}, "Username"), user,
+      el("label", {}, "Password"), pass,
+      el("details", {}, el("summary", {}, "Advanced"),
+        el("label", {}, "Server"), gw,
         el("label", {}, "Token"), tok, tokHint),
       el("div", { class: "row" }, go, this.playButton()));
     form.onsubmit = (e) => {
@@ -192,7 +192,7 @@ export class LobbyScreen {
       go.disabled = true;
       void this.doLogin(gw.value.trim(), user.value.trim(), pass.value, tok.value.trim()).finally(() => (go.disabled = false));
     };
-    this.render("Project Blackout", "Login no servidor local via WebSocket", form);
+    this.render("Project Blackout", "Log in to the local server using WebSocket", form);
     this.status("");
   }
 
@@ -200,7 +200,7 @@ export class LobbyScreen {
     this.teardown();
     try {
       const tokens = tokenBytes
-        ? [{ label: "conta web", bytes: tokenBytes }]
+        ? [{ label: "web account", bytes: tokenBytes }]
         : tokB64 ? [{ label: "campo Token", bytes: parseTokenInput(tokB64) }] : await candidateTokens(user, pass);
       let auth!: AuthClient;
       let res!: LoginResult;
@@ -213,12 +213,13 @@ export class LobbyScreen {
         auth.conn.close();
       }
       if (!res.ok) {
-        this.status(`Login recusado: ${res.errorName}\n(o servidor BR autentica só por token: accounts.token precisa ser o token acima)`, true);
+        this.status(`Login rejected: ${res.errorName}
+(the BR server authenticates by token only: accounts.token must match the token above)`, true);
         auth.conn.close();
         return;
       }
       this.login = res;
-      this.status(`Logado como ${res.username} (pid ${res.playerId}). Perfil e inventário (2316/2318)...`);
+      this.status(`Logado como ${res.username} (pid ${res.playerId}). Profile and inventory (2316/2318)...`);
       try {
         this.authMeta = await auth.fetchMeta();
       } catch (e) {
@@ -237,33 +238,33 @@ export class LobbyScreen {
     const games = servers.filter((s) => s.index > 0);
     const grid = el("div", { class: "grid" });
     for (const s of games) {
-      const t = el("button", { class: "tile" }, `Servidor ${s.index}`,
+      const t = el("button", { class: "tile" }, `Server ${s.index}`,
         el("small", {}, `${s.online ? "online" : "offline"} · ${s.players}/${s.maxPlayers} · porta ${s.port}`));
       t.onclick = () => void this.pickServer(s);
       grid.append(t);
     }
-    if (!games.length) grid.append(el("div", { class: "sub" }, "Nenhum servidor de jogo na lista (GAME_SERVER_STATE_ACK)."));
-    const back = el("button", {}, "Sair");
+    if (!games.length) grid.append(el("div", { class: "sub" }, "No game servers in the list (GAME_SERVER_STATE_ACK)."));
+    const back = el("button", {}, "Exit");
     back.onclick = () => { this.teardown(); this.showLogin(); };
-    this.render("Servidores", `Jogador: ${this.login?.username}`, grid, el("div", { class: "row" }, back, this.playButton()));
+    this.render("Servidores", `Player: ${this.login?.username}`, grid, el("div", { class: "row" }, back, this.playButton()));
   }
 
   private async pickServer(s: GameServerInfo): Promise<void> {
-    this.status(`Canais do servidor ${s.index}...`);
+    this.status(`Channels on server ${s.index}...`);
     const info = await this.auth!.getChannels(s.index);
     const count = info?.channelPlayers.length || s.channelTypes.length || 10;
     const grid = el("div", { class: "grid" });
     for (let c = 0; c < count; c++) {
       const players = info ? `${info.channelPlayers[c]}/${info.maxPerChannel}` : "?";
-      const t = el("button", { class: "tile" }, `Canal ${c + 1}`, el("small", {}, `jogadores ${players} · tipo ${s.channelTypes[c] ?? "?"}`));
+      const t = el("button", { class: "tile" }, `Channel ${c + 1}`, el("small", {}, `players ${players} · tipo ${s.channelTypes[c] ?? "?"}`));
       t.onclick = () => void this.enterChannel(s, c);
       grid.append(t);
     }
-    const back = el("button", {}, "Voltar");
+    const back = el("button", {}, "Back");
     back.onclick = () => void this.auth!.getServers().then((l) => this.showServers(l)).catch((e) => this.status(String(e), true));
-    this.render(`Servidor ${s.index} — canais`, info ? "GET_CHANNELLIST_ACK" : "sem resposta do GET_CHANNELLIST (lista padrão)", grid,
+    this.render(`Server ${s.index} — canais`, info ? "GET_CHANNELLIST_ACK" : "no response from GET_CHANNELLIST (default list)", grid,
       el("div", { class: "row" }, back, this.playButton()));
-    this.status(info ? "" : "Aviso: servidor não respondeu GET_CHANNELLIST (exige 11 canais no DB).", !info);
+    this.status(info ? "" : "Warning: server did not answer GET_CHANNELLIST (requires 11 channels in the database).", !info);
   }
 
   private async enterChannel(s: GameServerInfo, channelId: number): Promise<void> {
@@ -275,16 +276,17 @@ export class LobbyScreen {
       const target = gameTargetForServer(s);
       this.status(`Conectando em ${target} (USER_ENTER)...`);
       const game = (this.game = new GameClient(target, this.serverUrlFromStorage()));
-      game.conn.onClose = (why) => this.status(`Conexão com o game fechada: ${why}`, true);
+      game.conn.onClose = (why) => this.status(`Game connection closed: ${why}`, true);
       this.status(`Conectando em ${target} (USER_ENTER, aguardando 2453/3082)...`);
       await game.enter(login.username, login.playerId, s.index);
-      this.status(`Entrando no canal ${channelId + 1}...`);
+      this.status(`Joining channel ${channelId + 1}...`);
       await game.selectChannel(channelId);
       await game.enterLobby();
       this.meta = createMetaSession({ authMeta: this.authMeta, enterPushes: game.enterPushes, gameConn: game.conn });
       this.showLobby(s, channelId);
     } catch (e) {
-      this.status(`${(e as Error).message ?? e}\nFaça login de novo.`, true);
+      this.status(`${(e as Error).message ?? e}
+Please log in again.`, true);
       this.game?.close();
       this.game = null;
     }
@@ -300,32 +302,32 @@ export class LobbyScreen {
     this.players.clear();
     const roomsBody = el("tbody");
     const playersBody = el("tbody");
-    const roomsTable = el("table", {}, el("thead", {}, el("tr", {}, ...["#", "Nome", "Mapa", "Estado", "Jog."].map((h) => el("th", {}, h)))), roomsBody);
+    const roomsTable = el("table", {}, el("thead", {}, el("tr", {}, ...["#", "Name", "Mapa", "Estado", "Jog."].map((h) => el("th", {}, h)))), roomsBody);
     const playersTable = el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Nick"), el("th", {}, "Rank"))), playersBody);
-    const exit = el("button", {}, "Sair");
+    const exit = el("button", {}, "Exit");
     exit.onclick = () => { this.teardown(); this.showLogin(); };
-    const create = el("button", { class: "primary" }, "Criar sala");
+    const create = el("button", { class: "primary" }, "Create room");
     create.onclick = () => {
       create.disabled = true;
-      void this.openRoom(s, channelId, (game, host) => RoomScreen.create(game, host, `sala de ${this.login?.username ?? "web"}`))
+      void this.openRoom(s, channelId, (game, host) => RoomScreen.create(game, host, `room of ${this.login?.username ?? "web"}`))
         .finally(() => (create.disabled = false));
     };
-    this.render(`Lobby — Servidor ${s.index}, Canal ${channelId + 1}`, `Jogador: ${this.login?.username} · clique numa sala para entrar`,
+    this.render(`Lobby — Server ${s.index}, Channel ${channelId + 1}`, `Player: ${this.login?.username} · click a room to join`,
       el("div", { class: "cols" },
-        el("div", {}, el("h2", {}, "Salas"), roomsTable),
-        el("div", {}, el("h2", {}, "Jogadores no lobby"), playersTable)),
+        el("div", {}, el("h2", {}, "Rooms"), roomsTable),
+        el("div", {}, el("h2", {}, "Lobby players"), playersTable)),
       el("div", { class: "row" }, create, this.playButton(), exit));
 
     const draw = () => {
       roomsBody.replaceChildren(...[...this.rooms.values()].sort((a, b) => a.roomId - b.roomId).map((r) => {
-        const tr = el("tr", { style: "cursor:pointer", title: "Entrar na sala" }, el("td", {}, String(r.roomId + 1)), el("td", {}, r.name), el("td", {}, String(r.mapId)),
+        const tr = el("tr", { style: "cursor:pointer", title: "Join room" }, el("td", {}, String(r.roomId + 1)), el("td", {}, r.name), el("td", {}, String(r.mapId)),
           el("td", {}, ROOM_STATES[r.state] ?? String(r.state)), el("td", {}, `${r.players}/${r.slots}`));
         tr.onclick = () => void this.openRoom(s, channelId, (game, host) => RoomScreen.join(game, host, r.roomId));
         return tr;
       }));
-      if (!this.rooms.size) roomsBody.append(el("tr", {}, el("td", { colspan: "5" }, "nenhuma sala")));
+      if (!this.rooms.size) roomsBody.append(el("tr", {}, el("td", { colspan: "5" }, "no rooms")));
       playersBody.replaceChildren(...[...this.players.values()].map((p) =>
-        el("tr", {}, el("td", {}, p.nickname || `(sessão ${p.sessionId})`), el("td", {}, String(p.rank)))));
+        el("tr", {}, el("td", {}, p.nickname || `(session ${p.sessionId})`), el("td", {}, String(p.rank)))));
       if (!this.players.size) playersBody.append(el("tr", {}, el("td", { colspan: "2" }, "—")));
     };
     draw();
@@ -342,7 +344,7 @@ export class LobbyScreen {
         for (const r of page.rooms) this.rooms.set(r.roomId, r);
         for (const p of page.players) this.players.set(p.sessionId, p);
         draw();
-        this.status(`${page.totalRooms} sala(s), ${page.totalPlayers} jogador(es) no lobby · atualizado ${new Date().toLocaleTimeString()}`);
+        this.status(`${page.totalRooms} room(s), ${page.totalPlayers} player(s) in the lobby · updated ${new Date().toLocaleTimeString()}`);
       }
       this.pollTimer = setTimeout(() => void poll(), 1500);
     };

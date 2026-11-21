@@ -1,9 +1,9 @@
 // Data layer of the inventory / shop screens: stores + UI state -> MenuData. The Cross lobby (screensCross) draws it.
-import { EquipSlot, ItemEquipType, type InventoryItem } from "../types.ts";
+import { EquipSlot, type InventoryItem } from "../types.ts";
 import type { PlayerStore } from "../state/PlayerStore.ts";
 import type { ShopOffer, ShopOption, ShopStore } from "../state/ShopStore.ts";
 import { filterOffers, priceIn, type Currency } from "../state/ShopStore.ts";
-import { charaTeamOf, countIsSeconds, equipSlotOf, isStockObjectId, itemTerm, matchesFilter, tabOf, type ItemFilter, type ItemTab, type ItemTerm } from "../state/itemInfo.ts";
+import { charaTeamOf, countIsSeconds, equipSlotOf, itemTerm, matchesFilter, type ItemFilter, type ItemTab, type ItemTerm } from "../state/itemInfo.ts";
 import { itemName } from "../state/itemNames.ts";
 import { isItemShown } from "../state/weaponSupport.ts";
 import { iconOf } from "./icons.ts";
@@ -84,8 +84,8 @@ export const MAX_OPTIONS = 4;
 
 function fmtPeriod(sec: number): string {
   if (sec >= 86400) return `${Math.round(sec / 86400)} ${S.days}`;
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h ? `${h}h ${m}m` : `${m}m`;
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  return h ? `${h}h ${m}m` : s ? `${m}m ${s}s` : `${m}m`;
 }
 export function termText(t: ItemTerm): string {
   switch (t.kind) {
@@ -97,12 +97,12 @@ export function termText(t: ItemTerm): string {
     case "pc": return S.pcRoom;
   }
 }
-/** Shop option duration: 1039 authType 1 = quantity, 2 = period (seconds); count 0 = no limit. */
+/** Activatable equipment is converted to a timed item by the server's 1050 handler, including authType 1 offers. */
+export const offerUsesPeriod = (offer: ShopOffer): boolean => offer.item?.authType === 2 || countIsSeconds(offer.itemId);
+/** Shop option duration or quantity; count 0 = no limit. */
 export function optionText(o: ShopOption, offer: ShopOffer): string {
   if (!o.count) return S.unlimited;
-  const auth = offer.item?.authType;
-  const period = auth === 2 || (auth !== 1 && countIsSeconds(offer.itemId));
-  return period ? fmtPeriod(o.count) : `${o.count} ${S.units}`;
+  return offerUsesPeriod(offer) ? fmtPeriod(o.count) : `${o.count} ${S.units}`;
 }
 export const priceText = (v: number, c: Currency): string => `${fmtInt(v)} ${c === "gold" ? S.gold : S.cash}`;
 
@@ -117,9 +117,8 @@ function loadoutPanel(p: PlayerStore, tab: ItemTab): { titles: string[]; items: 
 
 export function inventoryItems(p: PlayerStore, ui: MenuUi): InventoryItem[] {
   const q = ui.search.trim().toLowerCase();
-  // kept even when incomplete in 2017: basics, equipped items and activated (Temporary) Item-tab goods
-  return p.items().filter((it) => isItemShown(it.itemId, isStockObjectId(it.objectId) || p.isEquipped(it) || (it.equip === ItemEquipType.Temporary && tabOf(it.itemId) === "item")) &&
-    matchesFilter(it.itemId, ui.tab, ui.filter) && (!q || itemName(it.itemId).name.toLowerCase().includes(q)))
+  // Owned items remain accessible even when this asset set cannot preview them. Only the shop is filtered.
+  return p.items().filter((it) => matchesFilter(it.itemId, ui.tab, ui.filter) && (!q || itemName(it.itemId).name.toLowerCase().includes(q)))
     // grouped by slot (primary, secondary, melee, throw, special; chara and parts after), equipped first inside a group, the
     // server's order kept otherwise (Array.sort is stable). It came in raw server order: knives between rifles.
     .sort((x, y) => (equipSlotOf(x.itemId) ?? 99) - (equipSlotOf(y.itemId) ?? 99) || Number(p.isEquipped(y)) - Number(p.isEquipped(x)));

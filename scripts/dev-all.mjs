@@ -26,7 +26,7 @@ const repoKey = root.replace(/\\/g, '/').toLowerCase();
 const dbDir = resolve(root, 'db');
 const serverDir = resolve(root, 'server');
 
-const POSTGRES_PORT = 5433;
+const POSTGRES_PORT = Number(process.env.PB_DB_PORT || 5433);
 
 const SERVICES = [
   {
@@ -113,8 +113,8 @@ async function main() {
   // server). Without this, --no-watch still full-reloaded the browser on every src/ edit.
   // vite.config.ts reads it: hmr:false + watch:null.
   if (noWatch) process.env.PB_VITE_HMR = '0';
-  // local stack only: opens the F2 test menu (5199) and the early leader TIMERSYNC 0; prod never sets it
-  process.env.PB_DEV_OPS ??= '1';
+  // Development battle commands require an explicit PB_DEV_OPS=1 opt-in.
+  process.env.PB_DEV_OPS ??= '0';
 
   await startPostgres();
 
@@ -123,7 +123,7 @@ async function main() {
   console.log(color('sup', '[sup] starting dev services...'));
   console.log(color('sup', '[sup]   game:     http://localhost:8000/'));
   console.log(color('sup', '[sup]   web:      ws://localhost:8090/  (/tcp /signal, http /api)'));
-  console.log(color('sup', '[sup]   auth ws:  :39290   game ws: :39291-39293   postgres: :5433'));
+  console.log(color('sup', `[sup]   auth ws:  :39290   game ws: :39291-39293   postgres: :${POSTGRES_PORT}`));
   if (noWatch) console.log(color('sup', '[sup] --no-watch: editing src/ will NOT reload anything (no vite HMR, no service restart). Reload = F5.'));
 
   let shuttingDown = false;

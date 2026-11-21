@@ -52,9 +52,9 @@ test("Bucket refills, IpCap caps non-loopback only", () => {
   for (let i = 0; i < 10; i++) assert.equal(cap.acquire("127.0.0.1"), true);
 });
 
-test("origin allow-list: vite :8000/:8001 always, PB_WEB_ORIGINS exact only", () => {
+test("origin allow-list: loopback development or exact configured origins", () => {
   assert.equal(isAllowedOrigin("http://localhost:8000", []), true);
-  assert.equal(isAllowedOrigin("http://192.168.0.5:8001", []), true);
+  assert.equal(isAllowedOrigin("http://192.168.0.5:8001", []), false);
   assert.equal(isAllowedOrigin("https://game.example.test", []), false);
   assert.equal(isAllowedOrigin("https://game.example.test", ["https://game.example.test"]), true);
   assert.equal(isAllowedOrigin("https://game.example.test.evil.com", ["https://game.example.test"]), false);

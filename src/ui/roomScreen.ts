@@ -79,7 +79,7 @@ export interface RoomScreenHost {
   subPhase?(): boolean;
 }
 
-const TEAM = ["FR (vermelho)", "CT (azul)"];
+const TEAM = ["FR (red)", "CT (blue)"];
 /** longest wait for the match preload before PRESTARTBATTLE (server kick: 90 s after LOADING_START); the rest loads after it */
 const PREP_CAP_MS = 25000;
 /** STARTBATTLE_ACK wait: the server answers once the leader and most of each team are ready, so a player who loaded fast
@@ -88,10 +88,10 @@ const STARTBATTLE_WAIT_MS = 45000;
 
 /** loading curtain captions of the battle start (the 2017 lobby host shows them; the legacy screen uses host.status) */
 export const BATTLE_CAPTION = {
-  start: "Iniciando a partida...\nAguarde um momento.",
-  load: "Carregando a partida...\nAguarde um momento.",
-  connect: "Conectando na partida...\nAguarde um momento.",
-  wait: "Aguardando os outros jogadores...",
+  start: "Starting the match...\nPlease wait.",
+  load: "Loading the match...\nPlease wait.",
+  connect: "Connecting to the match...\nPlease wait.",
+  wait: "Waiting for other players...",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...kids: (Node | string)[]) {
@@ -125,6 +125,7 @@ export class RoomScreen {
   private phase: "room" | "starting" | "battle" | "result" = "room";
   private lastResult: EndBattleInfo | null = null;
   private busy = false;
+  private startAbort: AbortController | null = null;
   /** the room's start countdown (5126); driven by cdTick while it counts */
   readonly countdown: RoomCountdown;
   private cdTick: ReturnType<typeof setInterval> | null = null;
@@ -134,7 +135,7 @@ export class RoomScreen {
     preloadGameChunk();
     this.room = new RoomClient(game);
     this.room.onChange = () => { if (this.phase !== "starting") this.draw(); };
-    this.room.onRulesChanged = () => { if (this.phase === "room") this.host.status("O líder alterou as regras da sala. Se você estava pronto, confirme Pronto novamente.", true); };
+    this.room.onRulesChanged = () => { if (this.phase === "room") this.host.status("The host changed the room rules. If you were ready, select Ready again.", true); };
     this.room.onStartGame = () => void this.bootstrapBattle();
     this.countdown = new RoomCountdown({
       notice: (t, c) => (host.notice ? host.notice(t, c) : t.trim() && host.status(t)),
@@ -144,14 +145,14 @@ export class RoomScreen {
     }, () => this.room.isLeader);
     this.room.onCountdown = (n) => this.onCountdown(n);
     this.room.onEndBattle = (e) => this.onEnd(e);
-    this.room.onKicked = (why) => { this.host.status(`Expulso da partida: ${why}`, true); this.stopNet(); this.phase = "room"; this.draw(); };
+    this.room.onKicked = (why) => { this.host.status(`Kicked from match: ${why}`, true); this.stopNet(); this.phase = "room"; this.draw(); };
   }
 
   /** Without `preset` the host card first shows a map picker (M. Station default, Metro); "Voltar" rejects. */
   static async create(game: GameClient, host: RoomScreenHost, name: string, preset?: RoomPreset): Promise<RoomScreen> {
     const p = preset ?? await RoomScreen.pickMap(host);
     const s = new RoomScreen(game, host);
-    host.status(`Criando sala (${p.mapName}, TDM)... o servidor ignora creates < 4s após entrar, pode levar alguns segundos.`);
+    host.status(`Creating room (${p.mapName}, Death Match)... Please wait.`);
     try {
       await s.room.create({ name, mapId: p.mapId, rule: p.rule, stage: p.stage, roomType: p.roomType, slots: p.slots ?? 16, killTime: p.killTime ?? 0x63, weaponsFlag: p.weaponsFlag, ai: p.ai,
         password: p.password, limit: p.limit, watchRule: p.watchRule, flag: p.flag, randomMaps: p.randomMaps });
@@ -160,7 +161,7 @@ export class RoomScreen {
       throw e;
     }
     s.draw();
-    host.status("Sala criada. Aguarde um jogador no time adversário ficar PRONTO e clique Iniciar.");
+    host.status("Room created. Wait for an opposing player to become READY, then select Start.");
     return s;
   }
 
@@ -169,8 +170,8 @@ export class RoomScreen {
     return new Promise((resolve, reject) => {
       const presets = buildRoomPresets();
       const tiles = presets.map((p, i) => button(`${p.mapName} (TDM)`, () => resolve(p), i === 0 ? "primary" : ""));
-      host.render("Criar sala", "Escolha o mapa · Team Deathmatch", el("div", { class: "row" }, ...tiles),
-        el("div", { class: "row" }, button("Voltar", () => reject(new Error("Criação de sala cancelada.")))));
+      host.render("Create room", "Choose map · Team Deathmatch", el("div", { class: "row" }, ...tiles),
+        el("div", { class: "row" }, button("Back", () => reject(new Error("Room creation cancelled.")))));
       host.status("");
     });
   }
@@ -184,7 +185,7 @@ export class RoomScreen {
       throw e;
     }
     s.draw();
-    host.status(`Entrou no slot ${s.room.mySlot + 1} (${TEAM[s.room.mySlot % 2]}).`);
+    host.status(`Joined slot ${s.room.mySlot + 1} (${TEAM[s.room.mySlot % 2]}).`);
     return s;
   }
 
@@ -198,7 +199,7 @@ export class RoomScreen {
       throw e;
     }
     s.draw();
-    host.status(`Entrou no slot ${s.room.mySlot + 1} (${TEAM[s.room.mySlot % 2]}).`);
+    host.status(`Joined slot ${s.room.mySlot + 1} (${TEAM[s.room.mySlot % 2]}).`);
     return s;
   }
 
@@ -240,36 +241,36 @@ export class RoomScreen {
       const rows = r.slots.filter((s) => s.slot % 2 === team && s.slot < (info?.slotCount ?? 16)).map((s) =>
         el("tr", {},
           el("td", {}, String(s.slot + 1)),
-          el("td", {}, (s.nick || (s.state >= 12 ? "(jogador)" : "—")) + (s.slot === r.leaderSlot ? " ★" : "") + (s.slot === r.mySlot ? " (você)" : "")),
+          el("td", {}, (s.nick || (s.state >= 12 ? "(player)" : "—")) + (s.slot === r.leaderSlot ? " ★" : "") + (s.slot === r.mySlot ? " (you)" : "")),
           el("td", {}, slotStateName(s.state))));
       return el("div", {}, el("h2", {}, TEAM[team]),
-        el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "#"), el("th", {}, "Jogador"), el("th", {}, "Estado"))), el("tbody", {}, ...rows)));
+        el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "#"), el("th", {}, "Player"), el("th", {}, "Estado"))), el("tbody", {}, ...rows)));
     });
     const me = r.slots[r.mySlot];
     const actions: Node[] = [];
     if (this.phase === "room") {
-      if (r.isLeader) actions.push(button("Iniciar partida", () => void this.startAsLeader(), "primary"));
-      else actions.push(button(me?.state === WIRE_READY ? "Cancelar pronto" : "Pronto", () => r.ready(), "primary"));
-      actions.push(button("Trocar time", () => {
-        if (!r.changeTeam(1 - (r.mySlot % 2))) this.host.status("Sem slot livre no outro time (ou você está PRONTO).", true);
+      if (r.isLeader) actions.push(button("Start match", () => void this.startAsLeader(), "primary"));
+      else actions.push(button(me?.state === WIRE_READY ? "Cancel ready" : "Ready", () => r.ready(), "primary"));
+      actions.push(button("Switch team", () => {
+        if (!r.changeTeam(1 - (r.mySlot % 2))) this.host.status("No free slot on the other team (or you are READY).", true);
       }));
-      actions.push(button("Sair da sala", () => void this.leave()));
+      actions.push(button("Leave room", () => void this.leave()));
     } else if (this.phase === "battle") {
-      actions.push(button("Abandonar partida", () => { r.giveUp(); this.stopNet(); this.phase = "room"; this.draw(); }));
-      if (r.isLeader) actions.push(button("Encerrar partida (tempo 0)", () => r.timerSync(0)));
+      actions.push(button("Leave match", () => { r.giveUp(); this.stopNet(); this.phase = "room"; this.draw(); }));
+      if (r.isLeader) actions.push(button("End match (time 0)", () => r.timerSync(0)));
     }
     const sub = info
-      ? `Sala #${info.roomId + 1} · mapa ${mapName(info.mapId)} · modo ${info.roomType === 4 ? "TDM" : info.roomType} · ${ROOM_STATE_NAMES[info.state] ?? info.state}`
+      ? `Room #${info.roomId + 1} · mapa ${mapName(info.mapId)} · mode ${info.roomType === 4 ? "TDM" : info.roomType} · ${ROOM_STATE_NAMES[info.state] ?? info.state}`
       : "";
     const extra: Node[] = [];
     if (this.phase === "battle" && this.net) {
-      extra.push(el("div", { class: "sub" }, `Em batalha · Match UDP slot ${this.net.link.session.slot} · tx ${this.net.link.txPackets} / rx ${this.net.link.rxPackets} pacotes`));
+      extra.push(el("div", { class: "sub" }, `In battle · Match UDP slot ${this.net.link.session.slot} · tx ${this.net.link.txPackets} / rx ${this.net.link.rxPackets} pacotes`));
     }
     if (this.lastResult) {
       const w = ["FR", "CT", "empate"][this.lastResult.winner] ?? String(this.lastResult.winner);
-      extra.push(el("div", { class: "sub" }, `Última partida: vencedor ${w}${this.lastResult.frKills !== undefined ? ` · kills FR ${this.lastResult.frKills}` : ""}`));
+      extra.push(el("div", { class: "sub" }, `Last match: winner ${w}${this.lastResult.frKills !== undefined ? ` · kills FR ${this.lastResult.frKills}` : ""}`));
     }
-    this.host.render(info?.name ?? "Sala", sub, el("div", { class: "cols" }, ...cols), ...extra, el("div", { class: "row" }, ...actions));
+    this.host.render(info?.name ?? "Room", sub, el("div", { class: "cols" }, ...cols), ...extra, el("div", { class: "row" }, ...actions));
   }
 
   private async startAsLeader(): Promise<void> {
@@ -280,7 +281,8 @@ export class RoomScreen {
       this.host.status("Iniciando (READYBATTLE)...");
       await this.room.start();
     } catch (e) {
-      this.host.status(`${(e as Error).message}\n(TDM precisa de pelo menos 1 jogador PRONTO no time adversário)`, true);
+      this.host.status(`${(e as Error).message}
+(TDM requires at least 1 READY player on the opposing team)`, true);
     } finally {
       this.busy = false;
     }
@@ -290,21 +292,28 @@ export class RoomScreen {
   private async bootstrapBattle(): Promise<void> {
     if (this.phase !== "room") return;
     this.phase = "starting";
+    const attempt = (this.startAbort = new AbortController());
+    const current = () => attempt.signal.throwIfAborted();
     this.stopCountdown();
     const r = this.room;
     try {
       this.host.loading?.(BATTLE_CAPTION.load);
-      this.host.status("Carregando (LOADING_START)...");
+      this.host.status("Loading the match...");
       await r.loadingStart();
-      if (!r.isLeader) await this.waitRoomState(RoomState.RENDEZVOUS, 15000); // leader's LOADING_START sets the UDP server
+      current();
+      if (!r.isLeader) await this.waitRoomState(RoomState.RENDEZVOUS, 15000, attempt.signal); // leader's LOADING_START sets the UDP server
+      current();
       // map, renderer and the match assets of every slot (USER_EQUIPMENT 3667 arrived with LOADING_START) load now, behind the curtain
       await runBattlePrep(r, PREP_CAP_MS);
-      this.host.status("PRESTARTBATTLE...");
+      current();
+      this.host.status("Preparing the match...");
       const ep = await r.preStart();
+      current();
       const roster = r.slots.filter((s) => s.state >= 12).map((s) => ({ slot: s.slot, name: s.nick || `slot ${s.slot + 1}`, team: (s.slot % 2) as 0 | 1 }));
       const net = new PbBattleNet({
         session: { uniqueRoomId: ep.uniqueRoomId, roomSeed: ep.roomSeed, slot: ep.slot, accountId: this.accountIdByte(), signalTicket: ep.signalTicket },
         roster, serverUrl: this.host.serverUrl ?? defaultServerUrl(), room: r,
+        p2p: { relayOnly: import.meta.env?.VITE_RELAY_ONLY === "1" },
       });
       this.net = net;
       // Chain onto room.onRespawnAck here, before the round's very first `r.respawn()` below: that first RESPAWN_ACK
@@ -314,26 +323,34 @@ export class RoomScreen {
       watchRespawnEquip(r as unknown as RespawnAckSource);
       this.host.loading?.(BATTLE_CAPTION.connect);
       setBattleProgress(0.93);
-      this.host.status(`Conectando na partida P2P (sala ${ep.uniqueRoomId})...`);
+      this.host.status("Connecting to the match host...");
       await net.connect();
+      current();
       const started = new Promise<void>((res, rej) => {
-        const t = setTimeout(() => rej(new Error("STARTBATTLE: timeout")), STARTBATTLE_WAIT_MS);
-        r.onBattleStart = () => { clearTimeout(t); r.onBattleStart = null; res(); };
+        const cleanup = () => { clearTimeout(t); r.onBattleStart = null; attempt.signal.removeEventListener("abort", cancelled); };
+        const cancelled = () => { cleanup(); rej(new Error("match start cancelled")); };
+        const t = setTimeout(() => { cleanup(); rej(new Error("STARTBATTLE: timeout")); }, STARTBATTLE_WAIT_MS);
+        attempt.signal.addEventListener("abort", cancelled, { once: true });
+        r.onBattleStart = () => { cleanup(); res(); };
       });
       r.startBattle();
       this.host.loading?.(BATTLE_CAPTION.wait);
       setBattleProgress(0.97);
-      this.host.status("Aguardando os outros jogadores (STARTBATTLE)...");
+      this.host.status("Waiting for other players...");
       await started;
+      current();
       net.setRespawnCount(await r.respawn());
+      current();
       this.phase = "battle";
       this.draw();
-      this.host.status("Partida em andamento.");
+      this.host.status("Match in progress.");
       this.host.onBattle?.(net, r);
     } catch (e) {
+      if (attempt.signal.aborted) return; // a previous start must not overwrite the next room or its loading state
       discardBattlePrep();
+      r.giveUp(); // [RECRIADO] release the server's loading/battle seat before allowing a retry
       this.host.loading?.(null);
-      this.host.status(`Falha ao iniciar a batalha: ${(e as Error).message}`, true);
+      this.host.status(`Failed to start battle: ${(e as Error).message}`, true);
       this.stopNet();
       this.phase = "room";
       this.draw();
@@ -345,33 +362,44 @@ export class RoomScreen {
     return Number(this.host.playerId & 0xffn);
   }
 
-  private waitRoomState(min: number, timeoutMs: number): Promise<void> {
+  private waitRoomState(min: number, timeoutMs: number, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
     if ((this.room.room?.state ?? 0) >= min) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const prev = this.room.onChange;
-      const t = setTimeout(() => { this.room.onChange = prev; reject(new Error(`sala não chegou em ${ROOM_STATE_NAMES[min]}`)); }, timeoutMs);
-      this.room.onChange = () => {
+      const cleanup = () => {
+        clearTimeout(t);
+        if (this.room.onChange === changed) this.room.onChange = prev;
+        signal.removeEventListener("abort", cancelled);
+      };
+      const cancelled = () => { cleanup(); reject(signal.reason); };
+      const t = setTimeout(() => { cleanup(); reject(new Error(`room did not arrive within ${ROOM_STATE_NAMES[min]}`)); }, timeoutMs);
+      const changed = () => {
         prev?.();
         if ((this.room.room?.state ?? 0) >= min) {
-          clearTimeout(t);
-          this.room.onChange = prev;
+          cleanup();
           resolve();
         }
       };
+      this.room.onChange = changed;
+      signal.addEventListener("abort", cancelled, { once: true });
     });
   }
 
   private onEnd(e: EndBattleInfo): void {
     this.lastResult = e;
     this.stopNet();
+    this.host.loading?.(null);
     this.phase = "room";
     this.draw();
-    this.host.status("Partida encerrada (ENDBATTLE). De volta à sala.");
+    this.host.status("Match ended (ENDBATTLE). Returning to the room.");
     // the away kick brought him back: the exe's message box text for it (the kick itself: awayChecker.ts 0x76c6c0)
-    if (e.away) this.host.popup?.(tOr("STBL_IDX_EP_GAME_AWAY_INPUT_LOBBY", "Por estar inativo na partida por muito tempo\nvocê foi movido para a sala de espera."));
+    if (e.away) this.host.popup?.(tOr("STBL_IDX_EP_GAME_AWAY_INPUT_LOBBY", "Moved to the lobby due to inactivity."));
   }
 
   private stopNet(): void {
+    this.startAbort?.abort();
+    this.startAbort = null;
     this.net?.dispose();
     this.net = null;
   }

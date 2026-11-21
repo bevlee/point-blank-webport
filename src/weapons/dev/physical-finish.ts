@@ -1,0 +1,53 @@
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { createPhysicalFinish, initPhysicalFinish, physicalFinish } from "../../render/physicalFinish";
+
+const finish = physicalFinish(new URLSearchParams(location.search).get("finish"));
+const labels = { silver: "Silver", gold: "Gold", darkmatter: "Dark Matter" };
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+const disposeFinish = await initPhysicalFinish(renderer);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x11151d);
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(2.8, 0.9, 4.6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 2.5; controls.maxDistance = 9;
+controls.autoRotateSpeed = 1.5;
+scene.add(new THREE.HemisphereLight(0xe7efff, 0x171c2b, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.5);key.position.set(1, 4, 3);scene.add(key);
+const model = (await new GLTFLoader().loadAsync("/assets/weapons/models/m4a1.glb")).scene;
+model.traverse((node) => {
+  if (!(node instanceof THREE.Mesh)) return;
+  const convert = (material: THREE.Material) => {
+    if (!(material instanceof THREE.MeshStandardMaterial) || material.name !== "m4a1") return material;
+    const result = createPhysicalFinish(material, finish);
+    scene.environment = result.envMap;
+    return result;
+  };
+  node.material = Array.isArray(node.material) ? node.material.map(convert) : convert(node.material);
+});
+const box = new THREE.Box3().setFromObject(model), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+model.position.sub(center);
+const pivot = new THREE.Group();pivot.add(model);
+pivot.scale.setScalar(3.6 / Math.max(size.x, size.y, size.z));
+if (size.z > size.x) pivot.rotation.y = Math.PI / 2;
+scene.add(pivot);
+document.getElementById("name")!.textContent = `M4A1 / ${labels[finish]}`;
+for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-finish]")) if (link.dataset.finish === finish) link.setAttribute("aria-current", "page");
+document.getElementById("status")!.textContent = "Ready · original PB model · demo-style studio reflections";
+document.getElementById("rotate")!.addEventListener("click", (event) => {
+  controls.autoRotate = !controls.autoRotate;
+  if (event.currentTarget instanceof HTMLElement) event.currentTarget.setAttribute("aria-pressed", String(controls.autoRotate));
+});
+const view = (position: THREE.Vector3) => { controls.autoRotate = false;camera.position.copy(position);controls.target.set(0, 0, 0);controls.update();document.getElementById("rotate")!.setAttribute("aria-pressed", "false"); };
+document.getElementById("side")!.addEventListener("click", () => view(new THREE.Vector3(0, 0.35, 5.7)));
+document.getElementById("three")!.addEventListener("click", () => view(new THREE.Vector3(2.8, 0.9, 4.6)));
+addEventListener("resize", () => {camera.aspect = innerWidth / innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth, innerHeight);});
+renderer.setAnimationLoop(() => {controls.update();renderer.render(scene, camera);});
+addEventListener("pagehide", () => {renderer.setAnimationLoop(null);controls.dispose();disposeFinish();renderer.dispose();});

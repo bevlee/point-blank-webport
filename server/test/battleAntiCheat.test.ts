@@ -115,6 +115,37 @@ test("the respawn after a DEATH_REQ death waits RespawnTime (5 s minus the 1.5 s
   done(w);
 });
 
+test("a spawn kill whose DEATH_REQ beats the victim's RESPAWN still counts; that late RESPAWN is stale (TLA+ BattleLife)", () => {
+  const w = world();
+  const v = w.r.slots[1];
+  handleDeath(w.clients[0], deathReq(0, 1));        // life 1 ends
+  mock.timers.tick(5000);                           // the victim's client respawns, its RESPAWN still on the way
+  handleDeath(w.clients[0], deathReq(0, 1));        // the killer saw life 2 and killed it: that report arrives first
+  assert.equal(w.ops(5136).length, 4, "both kills broadcast (2 fighters each)");
+  assert.equal(v.allDeaths, 2);
+  assert.equal(w.r.frKills, 2);
+  assert.equal(w.r.slots[0].strikes, 0, "honest play, no strike");
+  handleRespawn(w.clients[1], respawnReq());        // the late RESPAWN of life 2
+  mock.timers.tick(6000);
+  assert.equal(w.ops(5138).length, 0, "stale RESPAWN: nobody sees the victim come back while it is dead");
+  assert.ok(v.deathState & DeadEnum.Dead);
+  handleRespawn(w.clients[1], respawnReq());        // life 3's RESPAWN, 6 s after the 2nd death
+  assert.equal(w.ops(5138).length, 2, "served");
+  assert.equal(v.deathState, DeadEnum.Alive);
+  done(w);
+});
+
+test("round modes: a DEATH_REQ on a fighter already dead this round is still skipped", () => {
+  const w = world(2, BOMB);
+  handleDeath(w.clients[0], deathReq(0, 1));
+  const n = w.ops(5136).length;
+  mock.timers.tick(5000);
+  handleDeath(w.clients[0], deathReq(0, 1));
+  assert.equal(w.ops(5136).length, n, "no second kill");
+  assert.equal(w.r.slots[1].allDeaths, 1);
+  done(w);
+});
+
 test("a Respawn100 coupon respawns at once", () => {
   const w = world();
   w.accounts[1].effects = CouponEffects.Respawn100;

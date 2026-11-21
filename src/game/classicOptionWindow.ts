@@ -59,28 +59,28 @@ const SOUND_ROWS = { bgm: 60, effect: 127, ui: 194, separator2: 271, voice: 284 
 
 /** control name -> STR key + fallback (texts are set by the exe, not stored in the layout) [INFERIDO] */
 const TEXT: Record<string, [key: string, fallback: string]> = {
-  opOptionCaption: ["STR_POPUP_ENV_SETTING", "Configuração"],
-  opPlay: ["STR_POPUP_GAME_PLAY", "Jogar"], opVideo: ["STR_POPUP_VIDEO", "Vídeo"], opInterface: ["STR_POPUP_OPTION_INTERFACE", "Interface"],
-  opSound: ["STR_POPUP_SOUND", "Áudio"], opControl: ["STR_POPUP_OPTION_CONTROL", "Controle"],
-  opInit: ["STR_POPUP_DEFAULT", "Padrão"], opConfirm: ["STBL_IDX_BUTTON_OK", "Confirmar"], opCancel: ["STBL_IDX_BUTTON_CANCEL", "Cancelar"],
-  opPlayBloodKey: ["STR_POPUP_DISPLAY_BLOOD", "Exibir sangue"], opPlayCrosshairKey: ["STR_POPUP_CROSSHAIR", "Mira"],
-  opVideoGammaKey: ["STR_POPUP_SCREEN_BRIGHTNESS", "Brilho"], opVideoWindowModeKey: ["STR_POPUP_WINDOW_MODE", "Modo de janela"],
-  opVideoLowTexKey: ["", "Texturas leves (conexão lenta)"], // [RECRIADO]
-  opVideoDynResKey: ["", "Resolução dinâmica"], opGfxDynResKey: ["", "Resolução dinâmica"], opGfxAntialiasKey: ["", "Antialias (próxima partida)"], // [RECRIADO] same setting in both tabs
-  opVideoResolutionKey: ["", "Escala de renderização"], // [RECRIADO] the client's own combo control, repurposed
-  opGfx: ["", "Gráficos"], // [RECRIADO] tab; rows = names of the official DX11 launcher
-  opGfxNormalKey: ["", "Normal Mapping"], opGfxSpecKey: ["", "Specular"], opGfxReflectKey: ["", "Reflexo"], opGfxRimKey: ["", "Rim Light"],
-  opGfxIblKey: ["", "Image Based Light"], opGfxAnisoKey: ["", "Filtro anisotrópico (Tri-Linear)"],
-  opGfxPhysicsKey: ["STR_POPUP_PHYSICS_EFFECT", "Efeitos de física"], // the exe's own row (opCapacityPhysX), moved to Gráficos
-  opInterfaceEffectKey: ["STR_POPUP_DISPLAY_EFFECT", "Efeito de texto"],
-  opInterfaceRadarKey: ["", "Interface do lobby"], // [RECRIADO] the hidden radar combo row, repurposed (settings.lobbyUi)
-  opInterfaceReload: ["STBL_IDX_GAMEKEY_RELOAD", "Recarregar"], // [RECRIADO] copy of the Padrão button: reloads the page so the lobby choice applies
-  opSoundBgmKey: ["STR_POPUP_SETTING_BGM", "Volume: Músicas"], opSoundEffectKey: ["STR_POPUP_SET_SFX_VOLUME", "Volume: Efeito sonoros"],
+  opOptionCaption: ["STR_POPUP_ENV_SETTING", "Options"],
+  opPlay: ["STR_POPUP_GAME_PLAY", "Game Play"], opVideo: ["STR_POPUP_VIDEO", "Video"], opInterface: ["STR_POPUP_OPTION_INTERFACE", "Interface"],
+  opSound: ["STR_POPUP_SOUND", "Sound"], opControl: ["STR_POPUP_OPTION_CONTROL", "Control"],
+  opInit: ["STR_POPUP_DEFAULT", "Default"], opConfirm: ["STBL_IDX_BUTTON_OK", "OK"], opCancel: ["STBL_IDX_BUTTON_CANCEL", "Cancel"],
+  opPlayBloodKey: ["STR_POPUP_DISPLAY_BLOOD", "Display Blood"], opPlayCrosshairKey: ["STR_POPUP_CROSSHAIR", "Crosshair"],
+  opVideoGammaKey: ["STR_POPUP_SCREEN_BRIGHTNESS", "Screen Brightness"], opVideoWindowModeKey: ["STR_POPUP_WINDOW_MODE", "Windowed Mode"],
+  opVideoLowTexKey: ["", "Light textures (slow connection)"], // [RECRIADO]
+  opVideoDynResKey: ["", "Dynamic resolution"], opGfxDynResKey: ["", "Dynamic resolution"], opGfxAntialiasKey: ["", "Antialiasing (next match)"], // [RECRIADO] same setting in both tabs
+  opVideoResolutionKey: ["", "Render scale"], // [RECRIADO] the client's own combo control, repurposed
+  opGfx: ["", "Graphics"], // [RECRIADO] tab; rows = names of the official DX11 launcher
+  opGfxNormalKey: ["", "Normal Mapping"], opGfxSpecKey: ["", "Specular"], opGfxReflectKey: ["", "Reflections"], opGfxRimKey: ["", "Rim Light"],
+  opGfxIblKey: ["", "Image Based Light"], opGfxAnisoKey: ["", "Anisotropic filtering (Tri-Linear)"],
+  opGfxPhysicsKey: ["STR_POPUP_PHYSICS_EFFECT", "Physics Effect"], // the exe's own row (opCapacityPhysX), moved to Gráficos
+  opInterfaceEffectKey: ["STR_POPUP_DISPLAY_EFFECT", "Display Text Effect"],
+  opInterfaceRadarKey: ["", "Lobby interface"], // [RECRIADO] the hidden radar combo row, repurposed (settings.lobbyUi)
+  opInterfaceReload: ["STBL_IDX_GAMEKEY_RELOAD", "Reload"], // [RECRIADO] copy of the Padrão button: reloads the page so the lobby choice applies
+  opSoundBgmKey: ["STR_POPUP_SETTING_BGM", "Set BGM"], opSoundEffectKey: ["STR_POPUP_SET_SFX_VOLUME", "Set SFX Volume"],
   opSoundUiKey: ["", "Volume: Interface"], // [RECRIADO] no interface-volume STR in the Cross / 2017 strings (the exe has no such gauge)
-  opSoundVoiceKey: ["STR_POPUP_RADIO_MESSAGE", "Mensagem de rádio"], // [INFERIDO] the row's combo is English / native language (0x889040 sets STR_POPUP_ENGLISH_LANGUAGE / NATIVE_LANGUAGE): a radio / voice language row, combo hidden
-  opControlReverseKey: ["STR_POPUP_INVERT_MOUSE", "Inverter mouse"], opControlMouseKey: ["STR_POPUP_MOUSE_SENSITIVITY", "Sensibilidade do mouse"],
-  opControlAimKey: ["", "Sensibilidade da mira"], // [RECRIADO] the client's popup has no zoomed-sensitivity row
-  opControlFovKey: ["STR_POPUP_FIELD_OF_VIEW", "Ângulo de visão"],
+  opSoundVoiceKey: ["STR_POPUP_RADIO_MESSAGE", "Radio Message"], // [INFERIDO] the row's combo is English / native language (0x889040 sets STR_POPUP_ENGLISH_LANGUAGE / NATIVE_LANGUAGE): a radio / voice language row, combo hidden
+  opControlReverseKey: ["STR_POPUP_INVERT_MOUSE", "Invert Mouse"], opControlMouseKey: ["STR_POPUP_MOUSE_SENSITIVITY", "Mouse Sensitivity"],
+  opControlAimKey: ["", "Aim sensitivity"], // [RECRIADO] the client's popup has no zoomed-sensitivity row
+  opControlFovKey: ["STR_POPUP_FIELD_OF_VIEW", "Field of View"],
 };
 
 interface GaugeDef { track: string; prev: string; next: string; thumb: string; value: string; min: number; max: number; step: number; /** digits shown and kept (the exe's mouse row prints "%.2f"); default 0 */ decimals?: number; get: (s: GameSettings) => number; set: (s: GameSettings, v: number) => void }
@@ -140,7 +140,7 @@ const PREVIEW_ZOOM = 2;
 const COLOR_ROW = { y: 226, swatchY: 246, size: 16, gap: 3, x: 14 };
 
 /** Vídeo > render scale combo labels [RECRIADO] (supersampling is NOT ORIGINAL) */
-const SCALE_LABEL: Record<RenderScale, string> = { "70": "70%", "100": "100%", native: "Nativa", "150": "150%", "200": "200%" };
+const SCALE_LABEL: Record<RenderScale, string> = { "70": "70%", "100": "100%", native: "Native", "150": "150%", "200": "200%" };
 const POPUP_ROW_H = 17;
 /** Interface > lobby combo labels [RECRIADO] */
 const LOBBY_LABEL: Record<LobbyUi, string> = { cross: "Cross" };
@@ -430,7 +430,7 @@ export class ClassicOptionWindow {
     if (!sect) return;
     const R = COLOR_ROW, lab = document.createElement("div");
     lab.className = "op-text";
-    lab.textContent = "Cor da mira";
+    lab.textContent = "Crosshair color";
     lab.style.cssText = `position:absolute;left:${R.x}px;top:${R.y}px;height:20px;line-height:20px;white-space:nowrap;pointer-events:none;font:bold 11px ${FONTS.popup};color:#c9ced6;text-shadow:1px 1px 0 rgba(0,0,0,.8);`;
     sect.el.appendChild(lab);
     const options: (number | null)[] = [null, ...CROSSHAIR_COLORS.map((_, i) => i)];
@@ -501,7 +501,7 @@ export class ClassicOptionWindow {
     if (!sect || !reload) return;
     const note = document.createElement("div");
     note.className = "op-text";
-    note.textContent = tOr("STBL_IDX_EP_OPTION_RESTART_MESSAGE", "A mudança será aplicada na próxima vez que abrir o jogo.");
+    note.textContent = tOr("STBL_IDX_EP_OPTION_RESTART_MESSAGE", "Some settings will be applied when the game is restarted.");
     note.style.cssText = `position:absolute;left:21px;top:${LOBBY_NOTE_Y}px;width:220px;white-space:normal;font:bold 11px ${FONTS.popup};color:#e8c060;`;
     sect.el.appendChild(note);
     this.hover("opInterfaceReload");

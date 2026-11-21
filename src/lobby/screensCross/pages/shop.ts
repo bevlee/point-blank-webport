@@ -4,11 +4,11 @@
 // slot<i>", openBuy + "buy" radio / currency / SBN_Buy (the same 1029 / 1045 path as the 2017 lobby).
 import type { GNode, I3Gui } from "../../ui/i3Gui.ts";
 import { MAIN_BUTTONS, SHOP_SUBS, SHOP_TABS } from "../../core/model.ts";
-import { MAX_OPTIONS, optionText, shopOffers, termText } from "../../screens/model.ts";
+import { MAX_OPTIONS, offerUsesPeriod, optionText, shopOffers, termText } from "../../screens/model.ts";
 import { fmtInt } from "../../screens/model.ts";
 import { BuyType } from "../../types.ts";
 import { priceIn, type ShopOffer } from "../../state/ShopStore.ts";
-import { countIsSeconds, itemTerm, type ItemFilter, type ItemTab } from "../../state/itemInfo.ts";
+import { itemTerm, type ItemFilter, type ItemTab } from "../../state/itemInfo.ts";
 import { prefetchModels } from "../preview.ts";
 import { charaDescription } from "../charaDescription.ts";
 import { itemName } from "../../state/itemNames.ts";
@@ -22,28 +22,29 @@ type Currency = "gold" | "cash";
 /** control -> STR of cross-ui-map.json (shopWin / shopBuyPopup, confidence str:exe); the have / remain labels are in
  * MONEY_LABELS */
 const TEXTS: Texts = {
-  shopWinCaption: ["STBL_IDX_SHOP_CAPTION", "Loja"],
-  shopAllWeapon: ["STBL_IDX_SHOP_FILTER_ALL", "Ver todos"], shopPrimaryWeapon: ["STBL_IDX_SHOP_FILTER_PRIMARY", "Arma primária"], shopSecondaryWeapon: ["STBL_IDX_SHOP_FILTER_SECONDARY", "Arma secundária"],
-  shopMeleeWeapon: ["STBL_IDX_SHOP_FILTER_MELEE", "Arma branca"], shopThrowingWeapon: ["STBL_IDX_SHOP_FILTER_THROWING", "Granada"], shopItemWeapon: ["STBL_IDX_SHOP_FILTER_SPECIAL", "Arma especial"],
-  shopAllCharacter: ["STBL_IDX_SHOP_FILTER_ALL", "Ver todos"], shopTypeCharacter: ["STBL_IDX_SHOP_FILTER_CHARA", "Personagem"], shopHairCharacter: ["STBL_IDX_SHOP_FILTER_HEAD", "Cabeça"],
-  shopItemAllGroup: ["STBL_IDX_SHOP_FILTER_ALL", "Ver todos"],
-  shopItemGroupMaintenance: ["STR_INVEN_MAINTENANCE_ITEM", "Durab."], shopItemGroupExpendable: ["STR_INVEN_EXPENDABLES", "Consumível"],
-  shopWeaponGoodsBuy: ["STBL_IDX_SHOP_BUY", "Comprar"], shopCharacterGoodsBuy: ["STBL_IDX_SHOP_BUY", "Comprar"], shopItemGoodsBuy: ["STBL_IDX_SHOP_BUY", "Comprar"],
-  shopWeaponGoodsCombo1: ["STBL_IDX_SHOP_INFO_BUYTYPE_POINT", "Gold"], shopWeaponGoodsCombo2: ["STBL_IDX_SHOP_INFO_BUYTYPE_CASH", "Cash"],
-  shopCharacterTermKey: ["STBL_IDX_SHOP_USE_TERM", "Tempo restante"],
-  shopCharacterPointInfoStatic: ["STBL_IDX_SHOP_INFO_POINT", "Preço"], shopItemPointInfoStatic: ["STBL_IDX_SHOP_INFO_POINT", "Preço"],
-  ...statTexts("shop", "STBL_IDX_SHOP_WEAPON_BULLET", "STBL_IDX_SHOP_WEAPON_RANGE"),
+  shopWinCaption: ["STBL_IDX_SHOP_CAPTION", "Shop"],
+  shopAllWeapon: ["STBL_IDX_SHOP_FILTER_ALL", "All"], shopPrimaryWeapon: ["STBL_IDX_SHOP_FILTER_PRIMARY", "Main"], shopSecondaryWeapon: ["STBL_IDX_SHOP_FILTER_SECONDARY", "Secondary"],
+  shopMeleeWeapon: ["STBL_IDX_SHOP_FILTER_MELEE", "Melee"], shopThrowingWeapon: ["STBL_IDX_SHOP_FILTER_THROWING", "Explosive"], shopItemWeapon: ["STBL_IDX_SHOP_FILTER_SPECIAL", "Special"],
+  shopAllCharacter: ["STBL_IDX_SHOP_FILTER_ALL", "All"], shopTypeCharacter: ["STBL_IDX_SHOP_FILTER_CHARA", "Character"], shopHairCharacter: ["STBL_IDX_SHOP_FILTER_HEAD", "Head"],
+  shopItemAllGroup: ["STBL_IDX_SHOP_FILTER_ALL", "All"],
+  shopItemMaintenanceGroup: ["STR_INVEN_MAINTENANCE_ITEM", "Timed"], shopItemExpendableGroup: ["STR_INVEN_EXPENDABLES", "Consumable"],
+  shopWeaponGoodsBuy: ["STBL_IDX_SHOP_BUY", "Buy"], shopCharacterGoodsBuy: ["STBL_IDX_SHOP_BUY", "Buy"], shopItemGoodsBuy: ["STBL_IDX_SHOP_BUY", "Buy"],
+  shopWeaponGoodsGift: ["STBL_IDX_SHOP_GIFT", "Gift"], shopCharacterGoodsGift: ["STBL_IDX_SHOP_GIFT", "Gift"], shopItemGoodsGift: ["STBL_IDX_SHOP_GIFT", "Gift"],
+  shopWeaponGoodsCombo1: ["STBL_IDX_SHOP_INFO_BUYTYPE_POINT", "Points"], shopWeaponGoodsCombo2: ["STBL_IDX_SHOP_INFO_BUYTYPE_CASH", "Cash"],
+  shopCharacterTermKey: ["STBL_IDX_SHOP_USE_TERM", "Time Left"],
+  shopCharacterPointInfoStatic: ["STBL_IDX_SHOP_INFO_POINT", "Price Info"], shopItemPointInfoStatic: ["STBL_IDX_SHOP_INFO_POINT", "Price Info"],
+  ...statTexts("shop", "STBL_IDX_SHOP_WEAPON_BULLET", "Ammo"),
   // the shop's own keys: 0xa65c48..0xa65d1f SetText(STBL_IDX_SHOP_WEAPON_*) on the stat rows (members 0x238..0x274)
-  shopDamageKey: ["STBL_IDX_SHOP_WEAPON_DAMAGE", "Dano"], shopRapidKey: ["STBL_IDX_SHOP_WEAPON_RAPID", "Taxa de disparo"],
-  shopHitRateKey: ["STBL_IDX_SHOP_WEAPON_HIT_RATE", "Precisão"], shopVertRecoilKey: ["STBL_IDX_SHOP_WEAPON_VERT_RECOIL", "Recuo v."],
-  shopHorzRecoilKey: ["STBL_IDX_SHOP_WEAPON_HORZ_RECOIL", "Recuo h."], shopSpeedKey: ["STBL_IDX_SHOP_WEAPON_SPEED", "Peso"],
-  shopBuyCaption: ["STBL_IDX_EP_SHOP_BUY_SUCCESS_CAPTION", "Confirmar"], shopBuyOk: ["STBL_IDX_BUTTON_OK", "Confirmar"], shopBuyCancel: ["STR_POPUP_LEAVE", "Sair"],
-  shopGiftCaption: ["STBL_IDX_EP_SHOP_GIFT_CAPTION", "Enviar presente"], shopGiftReceiverNameStatic: ["STBL_IDX_SHOP_RECEIVER", "Destinatário"],
-  shopGiftOk: ["STBL_IDX_BUTTON_OK", "Confirmar"], shopGiftCancel: ["STBL_IDX_BUTTON_CANCEL", "Cancelar"],
-  shopWeaponInfoDetail: ["STBL_IDX_SHOP_DETAIL", "Detalhes"],
+  shopDamageKey: ["STBL_IDX_SHOP_WEAPON_DAMAGE", "Damage"], shopRapidKey: ["STBL_IDX_SHOP_WEAPON_RAPID", "F.Speed"],
+  shopHitRateKey: ["STBL_IDX_SHOP_WEAPON_HIT_RATE", "Accuracy"], shopVertRecoilKey: ["STBL_IDX_SHOP_WEAPON_VERT_RECOIL", "V.Recoil"],
+  shopHorzRecoilKey: ["STBL_IDX_SHOP_WEAPON_HORZ_RECOIL", "H.Recoil"], shopSpeedKey: ["STBL_IDX_SHOP_WEAPON_SPEED", "M.Speed"],
+  shopBuyCaption: ["STBL_IDX_EP_SHOP_BUY_SUCCESS_CAPTION", "Confirm Purchase"], shopBuyOk: ["STBL_IDX_BUTTON_OK", "OK"], shopBuyCancel: ["STR_POPUP_LEAVE", "Exit"],
+  shopGiftCaption: ["STBL_IDX_EP_SHOP_GIFT_CAPTION", "Gift"], shopGiftReceiverNameStatic: ["STBL_IDX_SHOP_RECEIVER", "Recipient"],
+  shopGiftOk: ["STBL_IDX_BUTTON_OK", "OK"], shopGiftCancel: ["STBL_IDX_BUTTON_CANCEL", "Cancel"],
+  shopWeaponInfoDetail: ["STBL_IDX_SHOP_DETAIL", "Details"],
   // repair frames: Reparo / Custo de reparo are the exe's (str:exe)
   ...Object.fromEntries(["shopWeapon", "shopChara"].flatMap((r) => [
-    [`${r}DoRepair`, ["STR_SHOP_DO_REPAIR", "Reparo"]], [`${r}RepairText`, ["STR_POPUP_REPAIR_PRICE", "Custo de reparo"]]])),
+    [`${r}DoRepair`, ["STR_SHOP_DO_REPAIR", "Repair"]], [`${r}RepairText`, ["STR_POPUP_REPAIR_PRICE", "Repair Price"]]])),
 };
 
 /** have / remain money labels: sprintf("%s :", STBL_IDX_SHOP_HAVE_MONEY / REMAIN_MONEY), SetTextAlign(2, 1) (right / middle).
@@ -51,9 +52,9 @@ const TEXTS: Texts = {
  * 0x28), weapon 0xa6443d; buy popup 0x890b7a (CPopupShopBuy +0xc8 / 0xcc) */
 const MONEY_LABELS: [control: string, key: string, fallback: string][] = [
   ...["shopWeaponGoods", "shopCharacterGoods", "shopItemGoods", "shopBuy", "shopGift"].flatMap((g): [string, string, string][] => [
-    [`${g}HavePointStatic`, "STBL_IDX_SHOP_HAVE_MONEY", "Atual"], [`${g}RemainPointStatic`, "STBL_IDX_SHOP_REMAIN_MONEY", "Restante"]]),
+    [`${g}HavePointStatic`, "STBL_IDX_SHOP_HAVE_MONEY", "Total"], [`${g}RemainPointStatic`, "STBL_IDX_SHOP_REMAIN_MONEY", "Balance"]]),
   ...["shopWeapon", "shopChara"].flatMap((r): [string, string, string][] => [
-    [`${r}RepairHaveMoneyStatic`, "STBL_IDX_SHOP_HAVE_MONEY", "Atual"], [`${r}RepairRemainMoneyStatic`, "STBL_IDX_SHOP_REMAIN_MONEY", "Restante"]]),
+    [`${r}RepairHaveMoneyStatic`, "STBL_IDX_SHOP_HAVE_MONEY", "Total"], [`${r}RepairRemainMoneyStatic`, "STBL_IDX_SHOP_REMAIN_MONEY", "Balance"]]),
 ];
 /** slot text colours (GUI colour table 0x791000): owned term 0, "Não possui" 0x10, sale labels Cash 0x11 / Gold 0xe */
 const COLOR = { term: "#adadad", noHave: "#8bd925", cash: "#ffff00", gold: "#ffffff" };
@@ -112,9 +113,9 @@ const REPAIR: Partial<Record<ItemTab, string>> = { weapon: "shopWeapon", chara: 
 const FILTERS: Record<ItemTab, [string, ItemFilter][]> = {
   weapon: [["shopAllWeapon", "all"], ["shopPrimaryWeapon", "primary"], ["shopSecondaryWeapon", "secondary"], ["shopMeleeWeapon", "melee"], ["shopThrowingWeapon", "throw"], ["shopItemWeapon", "special"]],
   chara: [["shopAllCharacter", "all"], ["shopTypeCharacter", "chara"], ["shopHairCharacter", "head"]],
-  item: [["shopItemAllGroup", "all"], ["shopItemGroupMaintenance", "maintenance"], ["shopItemGroupExpendable", "expendable"]],
+  item: [["shopItemAllGroup", "all"], ["shopItemMaintenanceGroup", "maintenance"], ["shopItemExpendableGroup", "expendable"]],
 };
-const MONEY = (c: Currency): [string, string] => (c === "gold" ? ["STBL_IDX_SHOP_INFO_BUYTYPE_POINT", "Gold"] : ["STBL_IDX_SHOP_INFO_BUYTYPE_CASH", "Cash"]);
+const MONEY = (c: Currency): [string, string] => (c === "gold" ? ["STBL_IDX_SHOP_INFO_BUYTYPE_POINT", "Points"] : ["STBL_IDX_SHOP_INFO_BUYTYPE_CASH", "Cash"]);
 
 export class ShopPage {
   private gui: I3Gui;
@@ -140,6 +141,13 @@ export class ShopPage {
     const gui = (this.gui = pageGui(ctx, TEXTS));
     buildWindows(gui, ctx, root, ["shopWin"]);
     buildWindows(gui, ctx, popupRoot, ["shopBuyPopup", "shopGiftPopup"]);
+    // [RECRIADO] Give the English Balance caption the same column width as Total.
+    const giftBalance = gui.get("shopGiftRemainPointStatic"), giftTotal = gui.get("shopGiftHavePointStatic");
+    if (giftBalance && giftTotal) {
+      giftBalance.node = { ...giftBalance.node, x: giftTotal.node.x, w: giftTotal.node.w };
+      giftBalance.el.style.left = `${giftBalance.node.x}px`;
+      giftBalance.el.style.width = `${giftBalance.node.w}px`;
+    }
     this.nick = gui.edit("shopGiftReceiverInput", { maxLength: 16 });
     for (const n of HIDDEN) gui.hide(n);
     for (const [n, k, f] of MONEY_LABELS) { gui.setText(n, `${ctx.str(k, f)} :`); rightAlign(gui, n); }
@@ -165,9 +173,9 @@ export class ShopPage {
     onClick(gui, "shopWeaponGoodsCombo1", () => this.pick(() => c.click("buy", "i3UITab")));
     onClick(gui, "shopWeaponGoodsCombo2", () => this.pick(() => c.click("buy", "i3UITab0")));
     this.repaints.push(gui.button("shopBuyOk", () => { this.confirm = false; c.click("buy", "SBN_Buy"); }, () => this.canBuy()));
-    gui.button("shopBuyCancel", () => { this.confirm = false; c.draw(); });
+    gui.button("shopBuyCancel", () => { drop(); c.draw(); });
     this.repaints.push(gui.button("shopGiftOk", () => this.sendGift(), () => this.canBuy()));
-    gui.button("shopGiftCancel", () => { this.gift = false; c.draw(); });
+    gui.button("shopGiftCancel", () => { drop(); c.draw(); });
     gui.button("shopLeave", () => { drop(); c.click("main", MAIN_BUTTONS.back); });
     // Detalhes (0xa67870): the picked goods' weapon in weExtensionWin
     this.repaints.push(gui.button("shopWeaponInfoDetail", () => { const o = this.offer(); if (o) detail.open(o.itemId); }, () => { const o = this.offer(); return !!o && !!weaponStats(o.itemId, () => c.draw()); }));
@@ -196,11 +204,11 @@ export class ShopPage {
     const c = this.ctx.ctl, o = this.offer(), b = c.buy;
     if (!o || !b || b.busy || !c.session) return;
     const nick = (this.nick?.value ?? "").trim();
-    if (!nick) { c.say(this.ctx.str("STR_POPUP_MESSAGE_PLEASE_NAME", "Escreva o apelido"), true); return; }
+    if (!nick) { c.say(this.ctx.str("STR_POPUP_MESSAGE_PLEASE_NAME", "Please input the Nickname"), true); return; }
     const { currency, option } = this.choice(o), opt = o.options[option];
     if (!opt || priceIn(opt, currency) <= 0) return;
     const goodId = opt.goodId;
-    c.msg = { text: `Deseja enviar o presente para ${nick}?`, onOk: () => void this.giftSend(goodId, currency, nick), onCancel: () => {} };
+    c.msg = { text: `Send this gift to ${nick}?`, onOk: () => void this.giftSend(goodId, currency, nick), onCancel: () => {} };
     c.draw();
   }
 
@@ -219,7 +227,7 @@ export class ShopPage {
       this.gift = false;
       b.busy = false;
       c.click("buy", "SBN_Cancel");
-      c.say(this.ctx.str("STR_POPUP_MESSAGE_SUCCESS_GIFT", "O presente foi enviado para [%s]\ncom sucesso.").replace("%s", nick), true);
+      c.say(this.ctx.str("STR_POPUP_MESSAGE_SUCCESS_GIFT", "The gift is \nsuccessfully delivered to [%s].").replace("%s", nick), true);
     } catch (e) {
       b.busy = false;
       this.gift = true;
@@ -285,7 +293,7 @@ export class ShopPage {
       gui.setText(parts.value, o ? itemName(o.itemId).name : "");
       const have = o && inv.find((it) => it.itemId === o.itemId);
       if (!o) gui.setText(parts.term, "");
-      else if (!have) { gui.setText(parts.term, str("STBL_IDX_ITEM_NO_HAVE", "Não possui")); gui.setColor(parts.term, COLOR.noHave); }
+      else if (!have) { gui.setText(parts.term, str("STBL_IDX_ITEM_NO_HAVE", "Not Owned")); gui.setColor(parts.term, COLOR.noHave); }
       else if (tab === "item") {
         // item 0xa60159: "%s : {col:255,255,255,255}%d%s{/col}" (HAVE_TERM / HAVE_COUNT, the amount in white)
         const t = itemTerm(have), key = t.kind === "count" ? "STBL_IDX_ITEM_HAVE_COUNT" : "STBL_IDX_ITEM_HAVE_TERM";
@@ -393,10 +401,10 @@ export class ShopPage {
  * the unlimited text in DayStatic */
 function dayTexts(x: ShopOffer["options"][number], o: ShopOffer, str: (k: string, f: string) => string): [string, string] {
   if (!x.count) return ["", optionText(x, o)];
-  const auth = o.item?.authType;
-  if (!(auth === 2 || (auth !== 1 && countIsSeconds(o.itemId)))) return [`${x.count}`, `${str("STBL_IDX_ITEM_COUNT_UNIT", " und.")}:`];
+  if (!offerUsesPeriod(o)) return [`${x.count}`, `${str("STBL_IDX_ITEM_COUNT_UNIT", " Qty")}:`];
+  if (x.count < 3600) return [`${x.count}`, 's :'];
   const h = Math.ceil(x.count / 3600);
-  return h < 24 ? [`${h}`, `${str("STR_UI_HOUR", "Horas")} :`] : [`${Math.floor(h / 24)}`, `${str("STBL_IDX_ITEM_TERM_UNIT", "dias")} :`];
+  return h < 24 ? [`${h}`, `${str("STR_UI_HOUR", "hour")} :`] : [`${Math.floor(h / 24)}`, `${str("STBL_IDX_ITEM_TERM_UNIT", "d")} :`];
 }
 
 /** CStepShop::_PrintSaleText 0x84e470 with the goods' buy flags 0x7f4490 (1 = Gold price, 2 = Cash price, none = 1): the
@@ -405,7 +413,7 @@ function saleLabels(o: ShopOffer, str: (k: string, f: string) => string): [strin
   const gold = o.options.some((x) => priceIn(x, "gold") > 0), cash = o.options.some((x) => priceIn(x, "cash") > 0);
   const out: [string, string][] = [];
   if (cash) out.push([str("STR_SHOP_CAN_BUYING_CASH", "Cash"), COLOR.cash]);
-  if (gold || !cash) out.push([str("STR_SHOP_POINTITEM", "Gold"), COLOR.gold]);
+  if (gold || !cash) out.push([str("STR_SHOP_POINTITEM", "Point item"), COLOR.gold]);
   return out;
 }
 

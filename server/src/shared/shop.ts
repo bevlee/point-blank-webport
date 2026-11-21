@@ -2,6 +2,8 @@
 // BattleBoxXML (system_battle_boxes) and ZlibUtil.Compress. Shared by Auth (IsPackedGood/GetGood for the visit and
 // login events) and Game (catalog burst on 1029, GetGoods on 1045).
 import { deflateSync } from "node:zlib";
+import { permanentEquipmentGoods } from "./equipmentShop.ts";
+import { isEquipment } from "../../../src/lobby/equipment/rules.ts";
 import { pool } from "../db.ts";
 import { ItemsModel, ItemEquipType, getIdStatics } from "./items.ts";
 
@@ -345,6 +347,10 @@ async function load(type: number): Promise<void> {
   await loadFlashSale();
   if (type !== 1) return;
   try {
+    S.all = permanentEquipmentGoods(S.all);
+    const equipment = S.all.filter(g => isEquipment(g.item.id));
+    S.buyable = [...S.buyable.filter(g => !isEquipment(g.item.id)), ...equipment];
+    for (const g of equipment) S.unique.set(g.item.id, g);
     buildMatching();
     buildUniqueAndRepairs();
     buildPacked();

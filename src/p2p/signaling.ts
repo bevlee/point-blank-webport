@@ -69,27 +69,37 @@ export class WebSignaling implements HostSignaling, GuestSignaling {
   readonly ready: Promise<RTCIceServer[]>;
   hostOnline = false;
   private readonly ws: WebSocket;
-  private hostWaiters: (() => void)[] = [];
+  private hostWaiters = new Set<{ ready(): void; closed(error: Error): void }>();
+  private closedReason: Error | null = null;
   private queue: string[] = [];
   /** "ready" came: the server took the ticket, the queue may go out */
   private authed = false;
   /** offers / candidates / byes that came before their handler was set (the host is still booting its Worker) */
   private backlog: SignalMsg[] = [];
 
-  constructor(serverUrl: string, room: string, role: "host" | "guest", slot: number, ticket = "") {
+  constructor(serverUrl: string, room: string, role: "host" | "guest", slot: number, ticket = "", options: { readyTimeoutMs?: number } = {}) {
     const url = `${serverUrl.replace(/\/$/, "")}/signal?room=${encodeURIComponent(room)}&role=${role}&slot=${slot}`;
     this.ws = new WebSocket(url);
     this.ws.onopen = () => this.ws.send(JSON.stringify({ t: "auth", ticket }));
     this.ready = new Promise((resolve, reject) => {
+      // [RECRIADO] A proxy may accept the socket without completing authentication. Bound that loading state too.
+      const timer = setTimeout(() => {
+        reject(new Error("p2p: signaling authentication timed out"));
+        this.close();
+      }, options.readyTimeoutMs ?? 10000);
       this.ws.onmessage = (ev) => {
         let m: SignalMsg;
         try { m = JSON.parse(String(ev.data)) as SignalMsg; } catch { return; }
-        this.dispatch(m, resolve);
+        this.dispatch(m, (ice) => { clearTimeout(timer); resolve(ice); });
       };
-      this.ws.onerror = () => reject(new Error(`p2p: signaling WebSocket error (${url})`));
+      this.ws.onerror = () => { clearTimeout(timer); reject(new Error(`p2p: signaling WebSocket error (${url})`)); this.close(); };
 
       this.ws.onclose = (ev) => {
-        reject(new Error(`p2p: signaling closed (${ev.code} ${ev.reason})`));
+        clearTimeout(timer);
+        this.closedReason = new Error(`p2p: signaling closed (${ev.code} ${ev.reason})`);
+        reject(this.closedReason);
+        for (const waiter of this.hostWaiters) waiter.closed(this.closedReason);
+        this.hostWaiters.clear();
         this.onClose?.(`${ev.code} ${ev.reason}`);
       };
     });
@@ -121,14 +131,23 @@ export class WebSignaling implements HostSignaling, GuestSignaling {
 
   private setHost(online: boolean): void {
     this.hostOnline = online;
-    if (online) for (const w of this.hostWaiters.splice(0)) w();
+    if (online) for (const waiter of this.hostWaiters) waiter.ready();
   }
 
   hostReady(timeoutMs = 30000): Promise<void> {
-    return this.ready.then(() => this.hostOnline ? undefined : new Promise<void>((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error(`p2p: the room leader is not hosting (no host on /signal within ${timeoutMs} ms)`)), timeoutMs);
-      this.hostWaiters.push(() => { clearTimeout(t); resolve(); });
-    }));
+    return this.ready.then(() => {
+      if (this.closedReason) throw this.closedReason;
+      if (this.hostOnline) return;
+      return new Promise<void>((resolve, reject) => {
+        const cleanup = () => { clearTimeout(timer); this.hostWaiters.delete(waiter); };
+        const waiter = {
+          ready: () => { cleanup(); resolve(); },
+          closed: (error: Error) => { cleanup(); reject(error); },
+        };
+        const timer = setTimeout(() => waiter.closed(new Error(`p2p: the room leader is not hosting (no host on /signal within ${timeoutMs} ms)`)), timeoutMs);
+        this.hostWaiters.add(waiter);
+      });
+    });
   }
 
   private send(m: Record<string, unknown>): void {

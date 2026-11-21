@@ -3,10 +3,10 @@ const MAX_HITS = 10;
 
 const hits = new Map<string, number[]>();
 
-export function isRateLimited(key: string): boolean {
+export function isRateLimited(key: string, maxHits = MAX_HITS): boolean {
   const now = Date.now();
   const list = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
   list.push(now);
   hits.set(key, list);
-  return list.length > MAX_HITS;
+  return list.length > maxHits;
 }

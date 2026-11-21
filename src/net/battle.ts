@@ -283,6 +283,7 @@ export class PbBattleNet implements NetAdapter {
   private hostSlot = -1;
   private failingOver = false;
   private disposed = false;
+  private readonly lifetime = new AbortController();
 
   // ---- AI slots (AI rooms): the bots live in ONE client, the P2P match host, and travel as ordinary slot records
   /** AI slots this client simulates (it is the match host) */
@@ -358,7 +359,9 @@ export class PbBattleNet implements NetAdapter {
       session: this.link.session, serverUrl: this.link.serverUrl, room: this.room,
       bridge: { reportKill: (v, w, hs, kp, vp) => this.reportKillOnce(v, w, hs, kp, vp) },
       ...this.p2pOpts,
+      signal: this.lifetime.signal,
     });
+    if (this.disposed) { this.p2p.stop(); throw new Error("match start cancelled"); }
     const t = this.p2p.transport;
     this.link.transport = () => t;
     this.hostSlot = this.room?.leaderSlot ?? -1;
@@ -789,6 +792,7 @@ export class PbBattleNet implements NetAdapter {
 
   dispose(): void {
     this.disposed = true;
+    this.lifetime.abort();
     this.restoreRoomHooks?.();
     this.restoreRoomHooks = null;
     if (this.ticker) clearInterval(this.ticker);

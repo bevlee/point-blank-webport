@@ -92,7 +92,7 @@ export default defineConfig(({ mode }) => ({
   publicDir: mode === "prod" ? false : "public",
   plugins: mode === "prod" ? [noStaticTurn(), publicWithoutAssets(), hashedAssets()] : [noStaticTurn(), hashedAssets(), missingAssets404()],
   server: {
-    host: "0.0.0.0",
+    host: process.env.PB_VITE_HOST || "127.0.0.1",
     port: 8000,
     strictPort: false,
     ...(noHmr ? { hmr: false, watch: null } : {}),

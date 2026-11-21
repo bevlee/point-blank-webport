@@ -120,7 +120,7 @@ test("report: tickets (3 / 24 h), rank, self and GM ignored, one per target per 
   assert.equal((await submitReport(rep3, target, chat, "insulto")).err, 0);
   assert.equal(await isMuted(target.playerId), true, "3 distinct chat reporters in 24 h = mute");
   assert.equal(await banState(target), "mute", "the mechanism the chat handler reads");
-  assert.match(f.sent.filter((s) => s.op === 2571 && s.to === 103n /* the fake records the id it was built with */).map((s) => chatText(s.bytes)).join("|"), /silenciado por 30 minutos/);
+  assert.match(f.sent.filter((s) => s.op === 2571 && s.to === 103n /* the fake records the id it was built with */).map((s) => chatText(s.bytes)).join("|"), /muted for 30 minutes/);
   // the row is a MUTE of ~30 min, not a login ban
   const m = (await pool.query(`SELECT type, expire_date - start_date AS d FROM base_ban_history WHERE owner_id=$1`, [String(pids[3])])).rows;
   assert.equal(m.length, 1);

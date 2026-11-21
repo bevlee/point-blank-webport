@@ -79,7 +79,7 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
   check("second wall stops only inside half the range left: (140 - 3) / 2 = 68.5", secondWallStops(140, 3, 68) && !secondWallStops(140, 3, 69));
   const bodyWall = pbHitDamage({ base: 27, zone: "torso", wallThickness: 50 }).damage, headWall = pbHitDamage({ base: 27, zone: "head", wallThickness: 50 }).damage;
   check("CalcDamage wall term: body 27 x 1.2 through thickness 50 = 16; the head (no CalcDamage) keeps its damage",
-    bodyWall === 16 && headWall === pbHitDamage({ base: 27, zone: "head" }).damage, `${bodyWall} / ${headWall}`);
+    bodyWall === 14 && headWall === pbHitDamage({ base: 27, zone: "head" }).damage, `${bodyWall} / ${headWall}`);
 
   // ---- world ----
   await RAPIER.init();

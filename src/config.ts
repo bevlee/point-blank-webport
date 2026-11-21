@@ -67,7 +67,7 @@ export function loadMapIndex(): Promise<void> {
         byId.set(e.id, e);
         if (!passesCheck(e)) continue;
         ids.push(e.id);
-        labels[e.id] = e.name || e.nameEn || e.id;
+        labels[e.id] = e.nameEn || e.name || e.id; // nameEn = the server's English map name (UI is English); name = client locale
         if (e.mapId != null && !idToMapId.has(e.mapId)) idToMapId.set(e.mapId, e.id); // 9 maps have no mapId: left unmapped
       }
       mapIndexById = byId;

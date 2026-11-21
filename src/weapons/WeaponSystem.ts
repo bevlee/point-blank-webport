@@ -783,6 +783,7 @@ export class WeaponSystem {
     const s = this.slots[this.cur];
     const switching = this.switchTimer > 0;
 
+    if (input.inspect && !switching) this.viewmodel?.inspect();
     const reloadDown = !!input.reload;
     if (reloadDown && !this.reloadWasDown) this.startReload();
     this.reloadWasDown = reloadDown;
@@ -1549,9 +1550,9 @@ export class WeaponSystem {
    */
   bulletDamage(def: WeaponDef, zone: HitZone, dist: number, helmet: boolean, base = def.params.damage, wallThickness = 0, helmetDefense?: number): number {
     // bullet coupons (Hollow Point / Plus / Jack / Full Metal Jack, loadout.ts BATTLE_COUPONS [INFERIDO values])
-    const up = this.itemFx.bulletDamageUp ?? 0, pen = this.itemFx.bulletPenetrateUp ?? 0;
+    const pen = this.itemFx.bulletPenetrateUp ?? 0;
     return pbHitDamage({
-      base: base * (1 + up), zone, distance: dist, range: def.params.range > 0 ? def.params.range + titleFxLive.range : def.params.range, dpdRate: def.params.dpdRate, dpdBonus: 0.01 * titleFxLive.dpd, helmet,
+      base, zone, distance: dist, range: def.params.range > 0 ? def.params.range + titleFxLive.range : def.params.range, dpdRate: def.params.dpdRate, dpdBonus: 0.01 * titleFxLive.dpd, helmet,
       helmetPenetrate01: Math.min(1, (def.params.helmetPenetrate ?? def.helmetPenetrate / 100) + pen),
       wallThickness, // part rates: PB_CHARA.damageRate (2017 SWAT_Male); weapons.json hitzone is the Cross SWAT_Male table
       helmetDefense, // the target's head item rate (actorEquip.ts); undefined = damage.ts default

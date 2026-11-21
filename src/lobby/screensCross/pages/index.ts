@@ -6,9 +6,10 @@ import { CrossPreview } from "../preview.ts";
 import type { PageCtx, Str } from "./common.ts";
 import { ClanPage } from "./clan.ts";
 import { CommunityPage, type OpenMenu } from "./community.ts";
-import { InvenPage, useCosmeticItem } from "./inven.ts";
+import { useCosmeticItem } from "./inven.ts";
 import { ProfilePage } from "./profile.ts";
-import { ShopPage } from "./shop.ts";
+import { ReadyRoomPage } from "./readyRoom.ts";
+import { EquipmentPage } from "./equipment.ts";
 
 export class CrossPages {
   private pages: { paint(): void }[] = [];
@@ -16,15 +17,16 @@ export class CrossPages {
   private clan: ClanPage | null = null;
   private community: CommunityPage | null = null;
 
-  constructor(design: HTMLElement, above: HTMLElement | undefined, ctl: Lobby2017, str: Str, addFriend: (nick: string) => void, inviteFriend: (nick: string) => void, openMenu: OpenMenu) {
+  constructor(design: HTMLElement, above: HTMLElement | undefined, ctl: Lobby2017, str: Str, addFriend: (nick: string) => void, inviteFriend: (nick: string) => void, openMenu: OpenMenu, roomTools: { invite(): void; advanced(): void }) {
     this.preview = new CrossPreview(design, ctl);
     const layer = document.createElement("div");
     layer.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;";
     design.insertBefore(layer, above ?? null);
     const ctx: PageCtx = { ctl, layer, str };
     ctl.cosmeticUse = (it) => useCosmeticItem(ctx, it);
-    void Promise.all([InvenPage.create(ctx), ShopPage.create(ctx), ProfilePage.create(ctx)])
-      .then((pages) => { this.pages = pages; ctl.draw(); })
+    this.pages = [new EquipmentPage(ctx), new ReadyRoomPage(ctx, roomTools)];
+    void Promise.all([ProfilePage.create(ctx)])
+      .then((pages) => { this.pages.push(...pages); ctl.draw(); })
       .catch((e) => console.warn("[cross] pages", e));
     void ClanPage.create(ctx)
       .then((clan) => { this.clan = clan; ctl.draw(); })

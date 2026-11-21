@@ -310,6 +310,9 @@ export async function loadPlayerCompetitive(a: Account): Promise<void> {
 /** DaoManagerSQL.GetPlayerInventoryItems. */
 export async function getPlayerInventoryItems(owner: bigint): Promise<ItemsModel[]> {
   if (owner === 0n) return [];
+  // Existing equipment becomes permanent as each account next loads its inventory.
+  await pool.query(`UPDATE player_items SET equip=3,count=1 WHERE owner_id=$1 AND equip IN (1,2)
+    AND ((id / 100000 BETWEEN 1 AND 14) OR id / 100000 = 27)`, [id(owner)]);
   const r = await pool.query(`SELECT * FROM player_items WHERE owner_id=$1 ORDER BY object_id ASC`, [id(owner)]);
   return r.rows.map((x) => {
     const it = new ItemsModel(int(x.id));

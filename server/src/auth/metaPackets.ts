@@ -54,7 +54,7 @@ export function questingInfo(m: PlayerMissions): Uint8Array {
  * Game writes (clan.Id == 0 ? -1 : Logo). */
 export function writeUserInfoBasic(w: PacketWriter, a: Account, clan: ClanModel, gameLogo: boolean): void {
   csWriteU(w, a.nickname, 66);
-  w.writeD(a.getDisplayRank()).writeD(a.getRank()).writeD(a.gold).writeD(0).writeQ(BigInt(a.exp)).writeD(0).writeC(0).writeQ(0n)
+  w.writeD(a.getDisplayRank()).writeD(a.rank).writeD(a.gold).writeD(0).writeQ(BigInt(a.exp)).writeD(0).writeC(0).writeQ(0n)
     .writeC(0).writeC(0).writeD(a.tags).writeH(0).writeD(0).writeH(a.inventoryPlus).writeD(0).writeD(a.cash).writeD(clan.id)
     .writeD(a.clanAccess).writeD(0).writeD(0).writeC(a.cafePC).writeC(0);
   csWriteU(w, clan.name, 34);

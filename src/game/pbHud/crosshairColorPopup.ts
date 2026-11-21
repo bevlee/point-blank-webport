@@ -24,11 +24,11 @@ export async function openCrosshairColorPopup(host: HTMLElement, current: number
   stage.el.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:60";
   const gui = new I3Gui({ base: CROSS });
   gui.build(cloneNode(tree), stage.design, 0, 0); // Cross design position kept (342,221)
-  gui.setText("useItemChangeColorCrosshairPopupCaption", tOr("STR_POPUP_CAPTION_USE_ITEM", "Item utilizado"));
-  gui.setText("useItemChangeColorCrosshairPopupTitleStatic", tOr("STR_POPUP_USE_ITEM", "Item usado:"));
-  gui.setText("useItemChangeColorCrosshairPopupCurrentStatic", tOr("STR_POPUP_CURRENT_COLOR", "Cor atual:"));
-  gui.setText("useItemChangeColorCrosshairPopupSelectStatic", tOr("STR_POPUP_MODIFIED_COLOR", "Cor alterada:"));
-  gui.setText("useItemChangeColorCrosshairPopupNoticeValue", tOr("STR_POPUP_MESSAGE_CHOOSE_MODIFY_COLOR", "Escolha a cor desejada."));
+  gui.setText("useItemChangeColorCrosshairPopupCaption", tOr("STR_POPUP_CAPTION_USE_ITEM", "Use Item"));
+  gui.setText("useItemChangeColorCrosshairPopupTitleStatic", tOr("STR_POPUP_USE_ITEM", "Use Item:"));
+  gui.setText("useItemChangeColorCrosshairPopupCurrentStatic", tOr("STR_POPUP_CURRENT_COLOR", "Current Color:"));
+  gui.setText("useItemChangeColorCrosshairPopupSelectStatic", tOr("STR_POPUP_MODIFIED_COLOR", "Modified Color:"));
+  gui.setText("useItemChangeColorCrosshairPopupNoticeValue", tOr("STR_POPUP_MESSAGE_CHOOSE_MODIFY_COLOR", "Choose the color to modify"));
   for (const n of ["useItemChangeColorCrosshairCross", "useItemChangeColorCrosshairCrossDot", "useItemChangeColorCrosshairDot", "useItemChangeColorCrosshairCircle"]) gui.hide(n);
   gui.setState("useItemChangeColorCrosshairCurrentColorBox", Math.max(0, (current ?? 1) - 1));
 

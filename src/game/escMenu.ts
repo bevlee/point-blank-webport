@@ -15,11 +15,11 @@ const CROSS_BASE = `${UI_BASE}/cross`;
 const WINDOW = "Esc_PopupBG";
 /** button -> [STR key, fallback], in the order the Cross exe sets them (0x71992d..0x719a6d) */
 const TEXT: Record<string, [key: string, fallback: string]> = {
-  Esc_Popup_Option: ["STR_TBL_BATTLEGUI_OPTION_TEXT", "Configuração"],
-  Esc_Popup_Report: ["STR_TBL_BATTLEGUI_REPORT", "Reportar"],
-  Esc_Popup_ForciblyRemove: ["STR_EXIT_POPUP_FORCIBLYREMOVE", "Expulso"],
-  Esc_Popup_Exit: ["STR_TBL_BATTLEGUI_EXIT_TEXT", "Sair"],
-  Esc_Popup_Cancel: ["STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancelar"],
+  Esc_Popup_Option: ["STR_TBL_BATTLEGUI_OPTION_TEXT", "Options"],
+  Esc_Popup_Report: ["STR_TBL_BATTLEGUI_REPORT", "Report"],
+  Esc_Popup_ForciblyRemove: ["STR_EXIT_POPUP_FORCIBLYREMOVE", "Vote Kick"],
+  Esc_Popup_Exit: ["STR_TBL_BATTLEGUI_EXIT_TEXT", "Exit"],
+  Esc_Popup_Cancel: ["STR_TBL_BATTLEGUI_CANCEL_TEXT", "Cancel"],
 };
 /** rows top to bottom (the file's own y: 50 + 32 per row) */
 const ROWS = ["Esc_Popup_Option", "Esc_Popup_Report", "Esc_Popup_ForciblyRemove", "Esc_Popup_Exit", "Esc_Popup_Cancel"];
@@ -88,13 +88,13 @@ export class EscMenu {
   setSocial(h: EscSocial): void {
     if (this.social) return;
     this.social = h;
-    this.gui.button("Esc_Popup_Report", () => { this.hideForModal(); h.report(); });
-    this.gui.button("Esc_Popup_ForciblyRemove", () => { this.hideForModal(); h.banVote(); });
+    this.gui.button("Esc_Popup_Report", () => { this.hide(); h.report(); });
+    this.gui.button("Esc_Popup_ForciblyRemove", () => { this.hide(); h.banVote(); });
     this.layout();
   }
 
   /** closes the menu without asking for the pointer lock back: a popup that needs the mouse opens right after */
-  private hideForModal(): void {
+  hide(): void {
     this.open = false;
     this.stage.el.style.display = "none";
     this.options.close();

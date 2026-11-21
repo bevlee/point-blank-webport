@@ -15,6 +15,8 @@ import type { HitZone } from "./types";
  */
 
 export interface WeaponInput {
+  /** I: inspect an opt-in mastery camo. */
+  inspect?: boolean;
   fire: boolean; // trigger held
   firePressed: boolean; // trigger went down this frame
   aim: boolean; // right mouse
@@ -344,6 +346,7 @@ export class PbWeaponsBridge implements WeaponSystem {
 
   update(dt: number, input: WeaponInput, ctx: WeaponContext): void {
     this.ws.update(dt, {
+      inspect: input.inspect,
       fire: input.fire,
       aim: input.aim,
       reload: input.reload,

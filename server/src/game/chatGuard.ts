@@ -117,7 +117,7 @@ export const GM_MARK = "GM";
 
 /** `/ajuda` text, also shown at the end of the GM `:help` (every account sees it) */
 export const PLAYER_HELP = [
-  "Comandos: /w <nick> <texto> sussurro, /r <texto> responde, /ping, /bloquear <nick>, /desbloquear <nick>.",
-  "/denunciar <nick> <hack|chat> [detalhe], /votekick <nick> <hack|chat> (batalha), /votelider [nick], /sim, /nao, /bug.",
-  "Apelido com espaço: entre \"aspas\". Basta o começo do apelido se for único na sala.",
+  "Commands: /w <nick> <text> whisper, /r <text> reply, /ping, /bloquear <nick>, /desbloquear <nick>.",
+  "/denunciar <nick> <hack|chat> [details], /votekick <nick> <hack|chat> (battle), /votelider [nick], /sim, /nao, /bug.",
+  "Use quotes around nicknames containing spaces. A unique nickname prefix is enough.",
 ];

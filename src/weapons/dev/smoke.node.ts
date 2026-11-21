@@ -45,12 +45,12 @@ const check = (name: string, ok: boolean, info = "") => {
   check("fall 30m clamps to HP 100 (2017 SWAT_Male)", pbFallDamage(30) === 100);
   check("DPD K-2 at range = 1-0.25", Math.abs(distanceRate(140, 140, 0.25) - 0.75) < 1e-9);
   check("CalcDamage rounds +0.5, min 1", pbCalcDamage(24.4) === 24 && pbCalcDamage(24.5) === 25 && pbCalcDamage(0.1) === 1);
-  check("AK 33 head no helmet = HEAD_HIT_DAMAGE 200 (0x7fbf20), not 33 x rate", pbHitDamage({ base: 33, zone: "head" }).damage === 200);
-  check("AK 33 body = 33 x 1.2 = 40 (0x542df0)", pbHitDamage({ base: 33, zone: "torso" }).damage === 40);
-  check("AK 33 body @140m DPD .25 = 33 x 1.2 x .75 = 30", pbHitDamage({ base: 33, zone: "torso", distance: 140, range: 140, dpdRate: 0.25 }).damage === 30);
+  check("AK 33 head = rounded 33 x 1.5", pbHitDamage({ base: 33, zone: "head" }).damage === 50);
+  check("AK 33 body = base 33", pbHitDamage({ base: 33, zone: "torso" }).damage === 33);
+  check("AK 33 body @140m DPD .25 = rounded 33 x .75 = 25", pbHitDamage({ base: 33, zone: "torso", distance: 140, range: 140, dpdRate: 0.25 }).damage === 25);
   const blocked = pbHitDamage({ base: 33, zone: "head", helmet: true, helmetPenetrate01: 0.5, rand: 0.9 });
   const through = pbHitDamage({ base: 33, zone: "head", helmet: true, helmetPenetrate01: 0.5, rand: 0.5 });
-  check("helmet roll: p=.5/.75 -> .9 blocked, .5 through", blocked.helmetBlocked && !through.helmetBlocked && through.damage === 200);
+  check("helmet roll: p=.5/.75 -> .9 blocked, .5 through", blocked.helmetBlocked && !through.helmetBlocked && through.damage === 50);
 
   // ---- weapon system ----
   await RAPIER.init();

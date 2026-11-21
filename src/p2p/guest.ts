@@ -6,6 +6,7 @@ import { asBytes, readCloseFrame, REL, REL_INIT, STATE, STATE_HIGH_WATER, STATE_
 import { newSid, type GuestSignaling } from "./signaling.ts";
 
 export interface GuestOptions {
+  signal?: AbortSignal;
   RTCPeerConnection?: typeof RTCPeerConnection;
   timeoutMs?: number;
 }
@@ -17,6 +18,7 @@ export class RtcGuestTransport implements MatchTransport {
   onerror: ((err: Error) => void) | null = null;
   private open = false;
   private done = false;
+  private openingFailure: ((reason: string) => void) | null = null;
   private readonly pc: RTCPeerConnection;
   private readonly state: RTCDataChannel;
   private readonly rel: RTCDataChannel;
@@ -29,17 +31,23 @@ export class RtcGuestTransport implements MatchTransport {
 
   /** Offers through `sig`, resolves once both channels are open (the host has bound the link to `slot`). */
   static connect(sig: GuestSignaling, ice: RTCConfiguration, opts: GuestOptions = {}): Promise<RtcGuestTransport> {
+    opts.signal?.throwIfAborted();
     const PC = opts.RTCPeerConnection ?? globalThis.RTCPeerConnection;
     const t = new RtcGuestTransport(new PC(ice));
     const sid = newSid();
     const pending: RTCIceCandidateInit[] = [];
     let remoteSet = false;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { t.fail(`no WebRTC link to the host within ${opts.timeoutMs ?? 20000} ms`); reject(new Error("p2p: WebRTC link timeout (NAT without TURN?)")); }, opts.timeoutMs ?? 20000);
+      const timer = setTimeout(() => t.fail("WebRTC link timed out. Check the host connection and TURN relay configuration."), opts.timeoutMs ?? 20000);
+      const abort = () => t.fail("match start cancelled");
+      const cleanup = () => { clearTimeout(timer); opts.signal?.removeEventListener("abort", abort); };
+      opts.signal?.addEventListener("abort", abort, { once: true });
+      t.openingFailure = (reason) => { cleanup(); sig.bye(sid); reject(new Error(`p2p: ${reason}`)); };
       const maybeOpen = () => {
         if (t.open || t.done || t.state.readyState !== "open" || t.rel.readyState !== "open") return;
         t.open = true;
-        clearTimeout(timer);
+        t.openingFailure = null;
+        cleanup();
         resolve(t);
       };
       for (const ch of [t.state, t.rel]) {
@@ -68,7 +76,7 @@ export class RtcGuestTransport implements MatchTransport {
         t.pc.setRemoteDescription({ type: "answer", sdp }).then(() => {
           remoteSet = true;
           for (const c of pending.splice(0)) t.pc.addIceCandidate(c).catch(() => {});
-        }).catch((e: unknown) => reject(e));
+        }).catch((e: unknown) => t.fail(e instanceof Error ? e.message : String(e)));
       };
       sig.onCandidate = (s, c) => {
         if (s !== sid) return;
@@ -85,7 +93,7 @@ export class RtcGuestTransport implements MatchTransport {
       t.pc.createOffer()
         .then((o) => t.pc.setLocalDescription(o))
         .then(() => sig.offer(sid, t.pc.localDescription!.sdp))
-        .catch((e: unknown) => { clearTimeout(timer); reject(e); });
+        .catch((e: unknown) => t.fail(e instanceof Error ? e.message : String(e)));
     });
   }
 
@@ -103,6 +111,8 @@ export class RtcGuestTransport implements MatchTransport {
     this.done = true;
     const wasOpen = this.open;
     this.open = false;
+    this.openingFailure?.(reason);
+    this.openingFailure = null;
     try { this.pc.close(); } catch { /* ignore */ }
     if (wasOpen) this.onclose?.(reason);
   }

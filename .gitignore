@@ -34,3 +34,8 @@ shots/
 .DS_Store
 Thumbs.db
 nul
+
+# Private standalone hosting data
+/deploy/backups/
+/deploy/turnserver.conf
+/deploy/turn-tls/

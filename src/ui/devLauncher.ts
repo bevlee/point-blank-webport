@@ -4,7 +4,7 @@ import { AVAILABLE_MAPS, MAP_LABELS, mapIndexEntry } from "../config.ts";
 import { BOMB_SERVER_MAP_IDS, TDM_SERVER_MAP_IDS } from "../lobby/core/controller.ts";
 
 const KEYS = ["mode", "team", "bots", "allies", "rounds", "spectate", "gm", "bombspawn", "bombplanted", "bombrings"];
-const CSS = `#pbdevl{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:100;width:380px;background:#0c1220f2;border:1px solid #3a6ea5;color:#dfe8f5;font:13px Arial,sans-serif;padding:14px 18px;border-radius:4px}#pbdevl h3{margin:0 0 10px;color:#7fb8ff;font-size:15px}#pbdevl label{display:flex;justify-content:space-between;align-items:center;margin:6px 0}#pbdevl select,#pbdevl input[type=number]{width:190px;background:#18233a;color:#dfe8f5;border:1px solid #3a6ea5;padding:3px}#pbdevl .row{display:flex;gap:8px;margin-top:12px}#pbdevl button{flex:1;padding:6px;background:#1f3d66;color:#fff;border:1px solid #3a6ea5;cursor:pointer}#pbdevl small{color:#8fa0b8}`;
+const CSS = `#pbdevl{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:100;width:430px;background:#0c1220f2;border:1px solid #3a6ea5;color:#dfe8f5;font:13px Arial,sans-serif;padding:14px 18px;border-radius:4px}#pbdevl h3{margin:0 0 10px;color:#7fb8ff;font-size:15px}#pbdevl label{display:flex;justify-content:space-between;align-items:center;margin:6px 0}#pbdevl select,#pbdevl input[type=number]{width:190px;background:#18233a;color:#dfe8f5;border:1px solid #3a6ea5;padding:3px}#pbdevl .row{display:flex;gap:8px;margin-top:12px}#pbdevl button{flex:1;padding:6px;background:#1f3d66;color:#fff;border:1px solid #3a6ea5;cursor:pointer}#pbdevl small{color:#8fa0b8}`;
 
 /**
  * Called when a local match ends: the test params of the match (this launcher's or typed into the URL by hand) leave the address bar, the
@@ -30,19 +30,19 @@ export function openDevLauncher(start: (map: string) => void): void {
   box.id = "pbdevl";
   const opt = (v: string, t: string) => `<option value="${v}">${t}</option>`;
   const maps = "";
-  box.innerHTML = `<h3>Testes offline <small>(F2 fecha)</small></h3>
-<label>Mapa <select id="dl-map">${maps}</select></label>
-<label>Modo <select id="dl-mode">${opt("tdm", "Team Deathmatch")}${opt("bomb", "Destruição (Bomba)")}</select></label>
-<label>Seu time <select id="dl-team">${opt("red", "TR / vermelho")}${opt("blue", "CT / azul")}</select></label>
-<label>Entrar como espectador (8x8 de bots) <input id="dl-spec" type="checkbox"></label>
+  box.innerHTML = `<h3>Offline Test Match <small>(F2 to close)</small></h3>
+<label>Map <select id="dl-map">${maps}</select></label>
+<label>Mode <select id="dl-mode">${opt("tdm", "Team Deathmatch")}${opt("bomb", "Bomb Mission")}</select></label>
+<label>Your team <select id="dl-team">${opt("red", "Red Team")}${opt("blue", "Blue Team")}</select></label>
+<label>Spectate (8 bots per team) <input id="dl-spec" type="checkbox"></label>
 <label>Bots <input id="dl-bots" type="number" min="0" max="16" value="0"></label>
-<label>Bots no seu time <input id="dl-allies" type="number" min="0" max="16" value="0"></label>
-<label>Rodadas p/ vencer (0 = sem limite) <input id="dl-rounds" type="number" min="0" max="9" value="3"></label>
-<label>Nascer perto da bomba <select id="dl-spawn">${opt("", "não")}${opt("a", "ponto A")}${opt("b", "ponto B")}</select></label>
-<label>Bomba já plantada <select id="dl-planted">${opt("", "não")}${opt("a", "no ponto A")}${opt("b", "no ponto B")}</select></label>
-<label>Anéis dos pontos <input id="dl-rings" type="checkbox"></label>
-<div class="row"><button id="dl-go">Iniciar</button><button id="dl-x">Fechar</button></div>
-<small>Dentro do jogo, F2 abre o menu de ações (plantar, explodir, teleportar...).</small>`;
+<label>Allied bots <input id="dl-allies" type="number" min="0" max="16" value="0"></label>
+<label>Rounds to win (0 = unlimited) <input id="dl-rounds" type="number" min="0" max="9" value="3"></label>
+<label>Spawn near a bomb site <select id="dl-spawn">${opt("", "No")}${opt("a", "Site A")}${opt("b", "Site B")}</select></label>
+<label>Start with bomb planted <select id="dl-planted">${opt("", "No")}${opt("a", "Site A")}${opt("b", "Site B")}</select></label>
+<label>Show bomb site markers <input id="dl-rings" type="checkbox"></label>
+<div class="row"><button id="dl-go">Start</button><button id="dl-x">Close</button></div>
+<small>During a match, F2 opens the test actions (plant, detonate, teleport…).</small>`;
   document.body.appendChild(box);
   // Bomb Mission: only the maps that have bomb sites (maps/bombsites.json); "a_blowcity" is another map than the Bomb one ("blowcity")
   const mapSel = box.querySelector<HTMLSelectElement>("#dl-map")!, modeSel = box.querySelector<HTMLSelectElement>("#dl-mode")!;

@@ -6,7 +6,7 @@ import { MAIN_BUTTONS } from "../core/model.ts";
 import { UI_CLICK_CANCEL, UI_CLICK_OK, UI_CLICK_SELECT, UI_POPUP_OPEN } from "../../ui/uiClick.ts";
 
 /** packs read by the Cross lobby */
-export const CROSS_PACKS = ["UI_Project", "UI_Project_ServerList", "UI_Project_Lobby", "UI_Project_ReadyRoom", "UI_Project_Popup"] as const;
+export const CROSS_PACKS = ["UI_Project", "UI_Project_Lobby", "UI_Project_ReadyRoom", "UI_Project_Popup"] as const;
 
 /**
  * Windows drawn, by layer (later = on top). Each is built at its absolute place in the 1024x768 design. The page decides which
@@ -14,8 +14,6 @@ export const CROSS_PACKS = ["UI_Project", "UI_Project_ServerList", "UI_Project_L
  * (CMessageBox::Create 0x753c90), app.ts messageBox() does the same.
  */
 export const CROSS_WINDOWS: { pack: (typeof CROSS_PACKS)[number]; name: string; as?: string }[] = [
-  { pack: "UI_Project_ServerList", name: "ssServerListWin" },
-  { pack: "UI_Project_ServerList", name: "ssServerWin" },
   { pack: "UI_Project_Lobby", name: "lbInfoWin" },
   { pack: "UI_Project_Lobby", name: "lbUserListWin" },
   { pack: "UI_Project_Lobby", name: "lbRoomWin" },
@@ -39,9 +37,7 @@ export const CROSS_WINDOWS: { pack: (typeof CROSS_PACKS)[number]; name: string; 
 
 /** controls with no web equivalent (yet): hidden, never placeholders */
 export const CROSS_HIDDEN = [
-  // server phase: the 'go to server list' / next-server arrows (the web flow has one Back), the server-group legend
-  "ssGotoServerList", "ssNext", "ServerLabel1", "ServerLabel2", "ServerLabel3", "ServerLabel4", "ServerLabel5",
-  ...Array.from({ length: 20 }, (_, i) => `ssServerSelectNumber_${i + 1}`),
+  "lbServer", "lbServerCaption", "lbRoomServerInfo",
   // lobby: special-mode buttons, chat combo + language, clan / e-sports / nation marks. The info rows (lbMap ..
   // lbTeamBalance) stay: the exe draws every key and clears the values with no room picked (0x834450). Map picture: the
   // NEW / Christmas tags of the three map boxes (lb / rr / rrCreate ImageDummy3, ImageXMas) come from a per-stage mark list
@@ -239,8 +235,6 @@ export const CHAT_TAB = {
 /** Cross control -> controller click (placement, control name of the 2017 scenes) */
 export const CROSS_CLICK: Record<string, [p: string, c: string]> = {
   // ---- confirmed: case of the control's id in the OnGuiNotify switch (cross-ui-map handler / action) ----
-  ssEnter: ["list", "i3UIButtonComposed30"], // CPhaseChannelList::OnConnect 0x823380
-  lbServer: ["main", MAIN_BUTTONS.back], // SetEventOnce(2) 0x832ea0
   lbQuickStart: ["roomlist", "btn02"], // SetEventOnce(115) 0x8313b0
   lbRefresh: ["roomlist", "btn03"], // SetEvent(518) + _SortRoomList 0x832e00
   lbCreate: ["roomlist", "btn04"], // 0x8325a0 opens lbCreateWin
@@ -266,8 +260,6 @@ export const CROSS_CLICK: Record<string, [p: string, c: string]> = {
   mbClan: ["main", MAIN_BUTTONS.clan], // CMenuBar::OnClan 0x81c550: the controller's openClan (page "clan"; pages/clan.ts draws it)
 
   // ---- [INFERIDO]: linked with no decoded case (link-only), or the web action stands in for another one ----
-  ssRefresh: ["list", "i3UIButtonComposed3"], // SetEvent(16) 0x823490: meaning of the event inferred
-  ssPrev: ["main", MAIN_BUTTONS.back],
   lbPasswordCheck: ["hit", "chk:pwd"],
   rrCreateLimitSecondary: ["hit", "chk:wSub"],
   rrCreateLimitThrow: ["hit", "chk:wThrow"],
@@ -422,46 +414,3 @@ export const LIST_MODE: Record<string, [string, string]> = {
   modeShotgun: ["STR_TBL_GUI_LOBBY_SHOTGUNMODE_TITLE", "Shotguns"], modeKnife: ["STR_TBL_GUI_LOBBY_KNUCKLEMODE_TITLE", "Knucle Mode"],
   modeAnnihilation: ["STR_HEADER_MODE_ANNIHILATION", "Eliminate"], modeAce: ["STR_HEADER_DO_TCH_DN_ACE_ATTACKER", "Ace Attacker"], // Ace [INFERIDO]
 };
-
-/**
- * Server cards (CPhaseServerList, ssServerListWin of Ready_PhaseServerList.gui; link 0x81f9b5): 24 ssServerSlot%d cards (4 per
- * row, scrolled by rows of 4: 0x820660) with ssServerSlotText%d "%s %03d" (0x81efb0: type name 0x81ec40 + server number) and
- * the load gauge ssServerSlotUserGage%d (GAUGE_LEVELS.server); card shapes 0 normal, 1 over, 2 selected; text colour #adadad,
- * full #d20000, closed server #646464 + card disabled. Tabs ssServer_Tab0..5 (UpdateServerTab 0x8208d0): the ConfigEx.pef
- * ServerListTab order (Brazil: All, Normal, Normal2, Begin, Clan, Expert, Combination, Championship, Nation), a kind gets a
- * tab only with a server of it (0x69a1a0), at most 6, the rest off; the open tab is drawn in state 3 (setControlState 8,
- * 0x81f1c0); a tab click clears the pick and the scroll (0x8205b0). Enter / double click = TryEnterServer 0x820690 (full ->
- * STBL_IDX_EP_SERVER_USER_FULL_C, stop). TryEnterServer flow (0x820690):
- *  - server type (+0x54, 0x820fb0) == 7 and not the connected server -> STBL_IDX_EP_LOBBY_JOIN_ROOM_Q, yes -> 0x820810.
- *  - 0x820810(idx, type): stores the pick (+0x220 idx, +0x224 type). Other server than the connected one (0x69a590 != 0x69a6b0):
- *    0x69a610 connect, pending phase 0xc through 0x595c90 ([0xd85db4]) and 0x820c40(1). Same server: 0x5133a0(1) (channel window
- *    of the current phase, no phase change). Phase 0xc = PhaseChannelList [INFERIDO: the enum-to-class table 0x79a55c not decoded].
- * Card kind: the card name 0x81ec40 takes the same byte +0x54 (0x81f053). Its switch (arg = byte; 0 no name, 1 / 2 NORMAL, 3 BEGIN,
- * 4 CLAN, 5 EXPERT, 6 COMBINATION, 7 CHAMPIONSHIP, 8 NATIONAL) is the tab order of ServerListTab, but server sends SChannelType
- * (auth/packets.ts writeC(s.type): all 0, training 1, novice 2, public 3, expert 4, clan 5, combination 6, championship 7, nation 8).
- * CONFLICT: 3 / 4 / 5 differ (exe public = BEGIN, expert = CLAN, clan = EXPERT). SERVER_KIND below keeps the meaning map (seed
- * system_servers: Public / Clan); the exe switch is the reference if the server numbers change.
- */
-export const SERVER_CARDS = 24, SERVER_CARD_COLS = 4;
-export const SERVER_TABS = ["all", "normal", "begin", "clan", "expert", "combination", "championship", "nation"] as const;
-export type ServerTab = (typeof SERVER_TABS)[number];
-export const SERVER_TAB_TEXT: Record<ServerTab, [string, string]> = {
-  all: ["STR_TBL_NETWORK_SERVER_TAB_ALL", "All"], normal: ["STR_TBL_NETWORK_SERVER_TAB_NORMAL", "Public1"],
-  begin: ["STR_TBL_NETWORK_SERVER_TAB_BEGIN", "Novice"], clan: ["STR_TBL_NETWORK_SERVER_TAB_CLAN", "Clan"],
-  expert: ["STR_TBL_NETWORK_SERVER_TAB_EXPERT", "Expert"], combination: ["STR_TBL_NETWORK_SERVER_TAB_COMBINATION", "Combo"],
-  championship: ["STR_TBL_NETWORK_SERVER_TAB_CHAMPIONSHIP", "Tourney"], nation: ["STR_TBL_NETWORK_SERVER_TAB_NATIONAL", "National"],
-};
-/** 2017 SChannelType -> Cross kind (tab) and card name */
-export const SERVER_KIND: Record<number, { tab: ServerTab; name: [string, string] }> = {
-  0: { tab: "normal", name: ["STR_TBL_NETWORK_SERVER_NORMAL", "Open Server"] },
-  1: { tab: "normal", name: ["STR_TBL_NETWORK_SERVER_NORMAL", "Open Server"] },
-  2: { tab: "begin", name: ["STR_TBL_NETWORK_SERVER_BEGIN", "Novice Server"] },
-  3: { tab: "normal", name: ["STR_TBL_NETWORK_SERVER_NORMAL", "Open Server"] },
-  4: { tab: "expert", name: ["STR_TBL_NETWORK_SERVER_EXPERT", "Expert Server"] },
-  5: { tab: "clan", name: ["STR_TBL_NETWORK_SERVER_CLAN", "Clan Server"] },
-  6: { tab: "combination", name: ["STR_TBL_NETWORK_SERVER_COMBINATION", "Combination Server"] },
-  7: { tab: "championship", name: ["STR_TBL_NETWORK_SERVER_CHAMPIONSHIP", "Tournament Server"] },
-  8: { tab: "nation", name: ["STR_TBL_NETWORK_SERVER_NATIONAL", "National Server"] },
-};
-/** card text colours of 0x81efb0 (GUI colour table 0x791000 entries 0 / 15 / 21) */
-export const SERVER_CARD_COLOR = { normal: "#adadad", full: "#d20000", closed: "#646464" } as const;

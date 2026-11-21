@@ -18,7 +18,7 @@ export function stageName(mapId: number): string {
   return (id && MAP_LABELS[id]) || known;
 }
 
-export type Page = "channels" | "lobby" | "room" | "inventory" | "shop" | "profile" | "clan";
+export type Page = "connecting" | "lobby" | "room" | "inventory" | "shop" | "profile" | "clan";
 
 export interface Chrome {
   page: Page;
@@ -31,12 +31,11 @@ export interface Chrome {
   record: string;
   kd: string;
   headshot: string;
-  serverLabel: string;
-  /** Main's Back works (channels: only with more than one server) */
+  /** Back closes a room or menu; the lobby is the top-level screen. */
   canBack: boolean;
 }
 
-export const EMPTY_CHROME: Chrome = { page: "channels", nickname: "", rank: 0, expText: "", gold: 0, cash: 0, clan: "", record: "", kd: "", headshot: "", serverLabel: "", canBack: false };
+export const EMPTY_CHROME: Chrome = { page: "connecting", nickname: "", rank: 0, expText: "", gold: 0, cash: 0, clan: "", record: "", kd: "", headshot: "", canBack: false };
 
 /** Main button -> page / action (tooltips of PointBlankRe_Main.lua). */
 export const MAIN_BUTTONS = {

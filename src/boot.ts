@@ -1,4 +1,4 @@
-// Entry point: account screen (register/login via account-api) -> servers/channels -> lobby, inventory and shop -> room
+// Entry point: account screen (register/login via account-api) -> lobby, inventory and shop -> room
 // -> battle (main.ts startGame) -> room -> lobby. Lobby: the Point Blank Cross screens (src/lobby/screensCross, default);
 // ?lobby=web = simple table lobby (LobbyScreen, test utility).
 // ?play (or #play) skips straight to the map with local bots; ?manual shows the old token login form.

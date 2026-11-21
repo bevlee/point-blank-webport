@@ -17,8 +17,8 @@ test('shop and inventory switch immediately and leave no old windows enabled', (
 test('returning from equipment keeps ordinary phase navigation working', () => {
   const stage = new CrossStage(() => {});
   stage.snap({ phase: 'lobby', step: null });
-  stage.want({ phase: 'channels', step: null });
+  stage.want({ phase: 'room', step: null });
   for (let i = 0; i < 120; i++) stage.frame(1 / 60, 1024, 768);
-  assert.equal(stage.input('channels'), true);
+  assert.equal(stage.input('room'), true);
   assert.equal(stage.input('lobby'), false);
 });

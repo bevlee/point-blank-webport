@@ -11,7 +11,7 @@ import { CrossShowroom, type CameraLook } from "./showroom.ts";
 
 /** CStageReady::ChangeStep 0x5135d0: no step (servers, lobby, room) = Idle (0x513a04), profile = Left (0x513a87);
  * CStepInventory (0x842604) and CStepShop (0x84d697) ask Right */
-const LOOK: Record<Page, CameraLook> = { channels: 0, lobby: 0, room: 0, inventory: 2, shop: 2, profile: 1, clan: 0 };
+const LOOK: Record<Page, CameraLook> = { connecting: 0, lobby: 0, room: 0, inventory: 2, shop: 2, profile: 1, clan: 0 };
 
 // Background fetch of the models a shop / inventory grid shows, before the player clicks one: the preview loads the clicked
 // model only on click (showroom.ts / preview3d.ts show), so the first click waited for the download. Each grid paint replaces

@@ -1,5 +1,5 @@
 // Browser shell of the Point Blank Cross lobby: the Lobby2017 controller (core/controller.ts: state, stores and network,
-// no drawing) shown with the classic i3Gui windows of the Cross client (lobby/ui/i3Gui.ts). Pages: server / channel list (Ready_PhaseServer ssServerWin), lobby (Ready_PhaseLobby lbRoomWin / lbInfoWin /
+// no drawing) shown with the classic i3Gui windows of the Cross client (lobby/ui/i3Gui.ts). Pages: lobby (Ready_PhaseLobby lbRoomWin / lbInfoWin /
 // lbUserListWin / lbCreateWin), ready room (Ready_PhaseReadyRoom_New rrRoomWin), menu bar (Ready_MenuBar), join password
 // (Ready_Popup lbJoinWin). Every control name -> text / action lives in crossMap.ts. Inventory / shop / profile are not
 // drawn here yet (their menu-bar buttons are hidden). Same surface as LobbyScreen2017 for boot.ts.
@@ -31,7 +31,7 @@ import { enforceRoomWeapons } from "../../game/respawnSelect.ts";
 import { CrossPages } from "./pages/index.ts";
 import { nickCss, setIcon } from "./pages/common.ts";
 import { CROSS_SLIDE_WINDOWS, CrossStage, type CrossPhase, type CrossStep, type CrossTarget } from "./slide.ts";
-import { AI_GRADE_KEYS, CHAT_TAB, CLOCK_MODES, CROSS_CLICK, CROSS_HIDDEN, CROSS_PACKS, CROSS_SOUND, CROSS_TEXT, CROSS_WINDOWS, LEVEL_ICON, MAP_SHAPE, PC_CAFE_SHAPE, RECORD_WIN, ROOM_SELECT_SOUND, ROUND_WIN_MODES, SORT_COLUMN, LIST_MODE, SERVER_CARDS, infoMode, SERVER_CARD_COLS, SERVER_CARD_COLOR, SERVER_KIND, SERVER_TABS, SERVER_TAB_TEXT, type ServerTab, ANNOUNCE_SPEED, GAUGE_LEVELS, expBar, gaugeState, SPECIAL_WAR, STAGE_SHAPE, modeTag } from "./crossMap.ts";
+import { AI_GRADE_KEYS, CHAT_TAB, CLOCK_MODES, CROSS_CLICK, CROSS_HIDDEN, CROSS_PACKS, CROSS_SOUND, CROSS_TEXT, CROSS_WINDOWS, LEVEL_ICON, MAP_SHAPE, PC_CAFE_SHAPE, RECORD_WIN, ROOM_SELECT_SOUND, ROUND_WIN_MODES, SORT_COLUMN, LIST_MODE, infoMode, ANNOUNCE_SPEED, GAUGE_LEVELS, expBar, gaugeState, SPECIAL_WAR, STAGE_SHAPE, modeTag } from "./crossMap.ts";
 import { mapFromRoomMapId, mapIndexEntry } from "../../config.ts";
 import { NICK_COLORS } from "../../game/battleChatModel.ts";
 import { markAtlas, paintMark } from "./clanMarkView.ts";
@@ -41,8 +41,6 @@ import { CrossState, FriendErr, crossState, findUser, friendList, requestFriend 
 import { noteList } from "../../net/noteClient.ts";
 import { CMC, CMC_TEXT, canClanInvite, lobbyMenuItems, roomMenuItems } from "./contextMenu.ts";
 
-/** channels shown in the channel list (user choice 2026-10-12: the first one only) */
-const VISIBLE_CHANNELS = 1;
 const BASE = `${UI_BASE}/cross`;
 /** row pitch of ctList (the context menu's list template is not decoded) [INFERIDO] */
 const CTX_ROW_H = 16;
@@ -50,8 +48,8 @@ const CTX_ROW_H = 16;
 interface AdvState { weapons: WeaponChecks; limit: boolean; balance: number; watch: number }
 /** rrInviteWin rows (rrInviteCheck1..8) */
 const INVITE_ROWS = 8;
-/** rows of the lists, from the layouts: lbColumnN every 33 px (10), ssColumnN every 29 px (15), lbUserListSlotN every 25 px (8), rrRedSlotN every 24 px (8) */
-const ROOM_ROWS = 10, ROOM_ROW_H = 33, SERVER_ROWS = 15, SERVER_ROW_H = 29, USER_ROWS = 8, TEAM_ROWS = 8, TEAM_ROW_H = 24, TEAM_ROW_Y = 10, USER_ROW_H = 25;
+/** rows of the lists, from the layouts: lbColumnN every 33 px (10), lbUserListSlotN every 25 px (8), rrRedSlotN every 24 px (8) */
+const ROOM_ROWS = 10, ROOM_ROW_H = 33, USER_ROWS = 8, TEAM_ROWS = 8, TEAM_ROW_H = 24, TEAM_ROW_Y = 10, USER_ROW_H = 25;
 /** chat lines drawn in the text box (lbTextBox 109 px / rrTextBox 123 px) [INFERIDO line height] */
 const CHAT_LINE_H = 15;
 /** rows of the drop lists [INFERIDO]: the engine sizes a row to the font height + 2 (_ResizePopUp 0x1001e202) and the font of
@@ -127,11 +125,6 @@ export class LobbyScreenCross {
   private roomTop = 0;
   private userTop = 0;
   private chatBack = 0;
-  private serverHover = -1;
-  /** server cards: open tab, first row shown, card under the pointer (ssServerListWin) */
-  private serverTab: ServerTab = "all";
-  private serverTop = 0;
-  private cardHover = -1;
   private roomHover = -1;
   /** popups opened since the last paint (inputs are filled once per opening) */
   private wasCreate = false;
@@ -334,8 +327,6 @@ export class LobbyScreenCross {
         this.ctl.click(p, c);
       }, () => this.enabled(name)));
     }
-    this.wireServers();
-    this.wireServerCards();
     this.wireLobby();
     this.wireCreate();
     this.wireSpecialWar();
@@ -379,8 +370,6 @@ export class LobbyScreenCross {
   private enabled(name: string): boolean {
     const c = this.ctl, cr = c.create, r = c.roomScreen?.room;
     switch (name) {
-      case "ssEnter": return !c.busy && (c.channels ? c.channels.channelPlayers.length > 0 : c.servers.length > 0);
-      case "ssPrev": return !c.busy && !!c.channels && c.servers.length > 1;
       case "lbCreateConfirm": return !!cr?.map && !cr.busy && !c.busy;
       case "rrOption": case "rrInvite": return !!r?.isLeader && !r.ai && (r.room?.state ?? 1) <= 1 && !c.busy;
       case "rrCreateTeamBalanceNo": case "rrCreateTeamBalanceYes": case "rrCreateTeamBalanceYes2": return !!cr && !ROOM_MODES[cr.mode].ai;
@@ -392,96 +381,6 @@ export class LobbyScreenCross {
   private rowAt(el: HTMLElement, designH: number, e: MouseEvent, y0: number, rowH: number): number {
     const r = el.getBoundingClientRect(), k = r.height / designH;
     return Math.floor(((e.clientY - r.top) / k - y0) / rowH);
-  }
-
-  private wireServers(): void {
-    const gui = this.gui!;
-    for (let i = 0; i < SERVER_ROWS; i++) {
-      const b = gui.get(`ssSlot${i + 1}`);
-      if (!b) continue;
-      b.el.style.cursor = "pointer";
-      b.el.addEventListener("click", () => this.ctl.listSelect("channels", i));
-      b.el.addEventListener("dblclick", () => this.ctl.listActivate("channels", i));
-      b.el.addEventListener("pointerenter", () => { this.serverHover = i; this.paint(); });
-      b.el.addEventListener("pointerleave", () => { if (this.serverHover === i) { this.serverHover = -1; this.paint(); } });
-    }
-  }
-
-  /** servers of the open tab (index into ctl.servers) */
-  private tabServers(): number[] {
-    return this.ctl.servers.flatMap((sv, i) => (this.serverTab === "all" || SERVER_KIND[sv.type]?.tab === this.serverTab ? [i] : []));
-  }
-
-  /** TryEnterServer 0x820690: a closed server does nothing, a full one says USER_FULL, else the server's channels */
-  private enterServer(i: number): void {
-    const sv = this.ctl.servers[i];
-    if (!sv?.online || this.ctl.busy) return;
-    if (sv.maxPlayers > 0 && sv.players >= sv.maxPlayers) { this.ctl.say(this.str("STBL_IDX_EP_SERVER_USER_FULL_C", "Server Full\nPlease try again later."), true); return; }
-    this.ctl.listActivate("channels", i);
-  }
-
-  private wireServerCards(): void {
-    const gui = this.gui!;
-    for (let k = 0; k < SERVER_CARDS; k++) {
-      const b = gui.get(`ssServerSlot${k + 1}`);
-      if (!b) continue;
-      const at = () => this.tabServers()[this.serverTop * SERVER_CARD_COLS + k];
-      b.el.addEventListener("click", () => { const i = at(); if (i !== undefined && this.ctl.servers[i]?.online) this.ctl.listSelect("channels", i); });
-      b.el.addEventListener("dblclick", () => { const i = at(); if (i !== undefined) this.enterServer(i); });
-      b.el.addEventListener("pointerenter", () => { this.cardHover = k; this.paint(); });
-      b.el.addEventListener("pointerleave", () => { if (this.cardHover === k) { this.cardHover = -1; this.paint(); } });
-    }
-    SERVER_TABS.forEach((_, n) => {
-      const b = gui.get(`ssServer_Tab${n}`);
-      if (!b) return;
-      b.el.style.cursor = "pointer";
-      b.el.addEventListener("click", () => {
-        const tab = this.serverTabs()[n];
-        if (!tab || tab === this.serverTab) return;
-        this.serverTab = tab;
-        this.serverTop = 0;
-        this.ctl.chSelected = -1;
-        this.paint();
-      });
-    });
-    const rows = () => Math.ceil(this.tabServers().length / SERVER_CARD_COLS), shown = SERVER_CARDS / SERVER_CARD_COLS;
-    const scroll = gui.scrollList("ssServerListScrollList", (d) => { this.serverTop = Math.max(0, Math.min(rows() - shown, this.serverTop + d)); this.paint(); });
-    gui.get("ssServerListFrame")?.el.addEventListener("wheel", (e) => { e.preventDefault(); this.serverTop = Math.max(0, Math.min(rows() - shown, this.serverTop + Math.sign(e.deltaY))); this.paint(); }, { passive: false });
-    this.repaints.push(() => scroll(this.serverTop, rows(), shown));
-    this.repaints.push(gui.button("ssServer_Enter", () => this.enterServer(this.ctl.chSelected), () => !this.ctl.busy && !!this.ctl.servers[this.ctl.chSelected]?.online));
-    this.repaints.push(gui.button("ssServer_ListRefresh", () => this.ctl.click("list", "i3UIButtonComposed3"), () => !this.ctl.busy));
-  }
-
-  /** tabs shown: "all" and the kinds that have a server, in the ServerListTab order, at most 6 */
-  private serverTabs(): ServerTab[] {
-    const kinds = new Set(this.ctl.servers.map((sv) => SERVER_KIND[sv.type]?.tab).filter(Boolean));
-    return SERVER_TABS.filter((t) => t === "all" || kinds.has(t)).slice(0, 6);
-  }
-
-  private paintServerCards(): void {
-    const gui = this.gui!, c = this.ctl, tabs = this.serverTabs();
-    if (!tabs.includes(this.serverTab)) this.serverTab = "all";
-    for (let n = 0; n < 6; n++) {
-      const t = tabs[n];
-      gui.show(`ssServer_Tab${n}`, !!t);
-      if (!t) continue;
-      gui.setText(`ssServer_Tab${n}`, this.str(...SERVER_TAB_TEXT[t]));
-      gui.setState(`ssServer_Tab${n}`, t === this.serverTab ? 3 : 0);
-    }
-    const list = this.tabServers(), shown = SERVER_CARDS / SERVER_CARD_COLS;
-    this.serverTop = Math.max(0, Math.min(this.serverTop, Math.ceil(list.length / SERVER_CARD_COLS) - shown));
-    for (let k = 0; k < SERVER_CARDS; k++) {
-      const i = list[this.serverTop * SERVER_CARD_COLS + k], sv = i === undefined ? undefined : c.servers[i], n = k + 1;
-      gui.show(`ssServerSlot${n}`, !!sv);
-      if (!sv) continue;
-      const full = sv.maxPlayers > 0 && sv.players >= sv.maxPlayers, kind = SERVER_KIND[sv.type] ?? SERVER_KIND[0];
-      gui.setText(`ssServerSlotText${n}`, `${this.str(...kind.name)} ${pad3(sv.index)}`);
-      gui.setColor(`ssServerSlotText${n}`, !sv.online ? SERVER_CARD_COLOR.closed : full ? SERVER_CARD_COLOR.full : SERVER_CARD_COLOR.normal);
-      gui.setState(`ssServerSlot${n}`, !sv.online ? 3 : i === c.chSelected ? 2 : this.cardHover === k ? 1 : 0);
-      gui.get(`ssServerSlot${n}`)!.el.style.cursor = sv.online ? "pointer" : "default";
-      gui.show(`ssServerSlotUserGage${n}`, sv.online);
-      if (sv.online) gui.setState(`ssServerSlotUserGage${n}`, gaugeState(sv.players, sv.maxPlayers, GAUGE_LEVELS.server));
-    }
   }
 
   private rooms() { return sortRooms(this.ctl.session?.lobby.roomList() ?? [], this.ctl.roomSort); }
@@ -1112,9 +1011,6 @@ export class LobbyScreenCross {
     const page: Page = c.page;
     const loading = c.loading ?? (c.loadingRooms && page === "lobby" && !c.roomScreen ? T.loadingRooms : null);
     const chrome = c.chrome();
-    // CPhaseServerList (server cards) until a server is picked, then CPhaseChannelList (ssServerWin)
-    gui.show("ssServerListWin", page === "channels" && !c.channels);
-    gui.show("ssServerWin", page === "channels" && !!c.channels);
     for (const w of ["lbUserListWin", "lbRoomWin"]) gui.show(w, page === "lobby");
     // 0x836850: no room picked (this+0x698 == -1) -> 0x834450 clears the values and hides lbInfoWin (vf +0x110, 0 at 0x834594)
     gui.show("lbInfoWin", page === "lobby" && !!this.rooms()[c.roomSel]);
@@ -1135,7 +1031,7 @@ export class LobbyScreenCross {
     if (page !== "lobby" || c.create) this.specialWar = false;
     gui.show("lbSpecialWarWin", this.specialWar);
     gui.show("lbJoinWin", !!c.pwdPrompt);
-    gui.show("MenuBar", page !== "inventory" && page !== "shop" && page !== "room");
+    gui.show("MenuBar", page !== "connecting" && page !== "inventory" && page !== "shop" && page !== "room");
     // menu bar
     gui.setText("mbNickname", chrome.nickname);
     // 0x81cde9: nick colour 0 -> colour 3 (the text attr's #000000), else 0x4ad850 SetTextColor(table 0xb210a4[nick colour])
@@ -1146,7 +1042,6 @@ export class LobbyScreenCross {
     gui.setText("mbNcCoinValue", chrome.cash.toLocaleString("pt-BR"));
     gui.setText("mbAnnounce", c.log.at(-1) ?? "");
     this.rankIcon("mbRankMark", chrome.nickname ? chrome.rank : null);
-    if (page === "channels") { if (c.channels) this.paintServers(); else this.paintServerCards(); }
     if (page === "lobby") this.paintLobby();
     if (page === "room") this.paintRoom();
     if (page === "lobby" || page === "room") this.paintChat(page === "lobby" ? "lb" : "rr");
@@ -1165,7 +1060,7 @@ export class LobbyScreenCross {
     if (p === "inventory" || p === "shop" || p === "profile") return { phase: c.menuFrom, step: p };
     // Clã (2017 page): the Cross clan menu is its own popup (pages/clan.ts), this page is reached only from the 2017 lobby
     if (p === "clan") return { phase: c.menuFrom, step: null };
-    return { phase: p === "channels" ? (c.channels ? "channels" : "servers") : p, step: null };
+    return { phase: p === "connecting" ? "lobby" : p, step: null };
   }
 
   private slideWindows(k: CrossPhase | CrossStep): HTMLElement[] {
@@ -1187,7 +1082,7 @@ export class LobbyScreenCross {
    */
   private applySlides(): void {
     const fx = this.slideFx, target = this.slideTarget(), here = target.step ?? target.phase;
-    const equipment = target.step === "inventory" || target.step === "shop" || target.phase === "room";
+    const equipment = this.ctl.page === "connecting" || target.step === "inventory" || target.step === "shop" || target.phase === "room";
     if (equipment || this.equipmentShown) {
       fx.snap(target);
       this.slideShown.clear();
@@ -1265,24 +1160,6 @@ export class LobbyScreenCross {
     requestAnimationFrame(step);
   }
 
-  private paintServers(): void {
-    const gui = this.gui!, c = this.ctl;
-    // channel list only: the servers are the cards of ssServerListWin (paintServerCards)
-    // only the first channel of each server is listed (user choice 2026-10-12): the protocol still carries the 11 channels a
-    // server needs (2400 / 2333), the others are just not drawn
-    const rows = (c.channels?.channelPlayers ?? []).slice(0, VISIBLE_CHANNELS).map((n, i) => ({ num: i + 1, name: this.str("STR_TBL_GUI_READYROOM_NORMAL_SERVER1", "Server %03d").replace("%03d", pad3(i + 1)), players: n, max: c.channels!.maxPerChannel, online: true }));
-    gui.setText("ssServerCaption", c.chrome().serverLabel || (this.textOf("ssServerCaption") ?? ""));
-    for (let i = 0; i < SERVER_ROWS; i++) {
-      const r = rows[i], k = i + 1;
-      gui.setText(`ssSlotNumber${k}`, r ? String(r.num) : "");
-      gui.setText(`ssSlotServer${k}`, r?.name ?? "");
-      gui.show(`ssSlotUserGage${k}`, !!r?.online);
-      if (r?.online) gui.setState(`ssSlotUserGage${k}`, gaugeState(r.players, r.max, GAUGE_LEVELS.channel));
-    }
-    this.place("ssSelect", c.chSelected < rows.length ? c.chSelected * SERVER_ROW_H : null);
-    this.place("ssFocus", this.serverHover >= 0 && this.serverHover < rows.length ? this.serverHover * SERVER_ROW_H : null);
-  }
-
   /** moves a highlight bar to `top` (design px inside its parent), hidden on null */
   private place(name: string, top: number | null): void {
     const b = this.gui?.get(name);
@@ -1294,7 +1171,6 @@ export class LobbyScreenCross {
   private paintLobby(): void {
     const gui = this.gui!, c = this.ctl, rooms = this.rooms();
     this.roomTop = Math.max(0, Math.min(this.roomTop, rooms.length - ROOM_ROWS));
-    gui.setText("lbRoomServerInfo", c.chrome().serverLabel);
     for (let i = 0; i < ROOM_ROWS; i++) {
       const r = rooms[this.roomTop + i], k = i + 1, waiting = r?.state === 1;
       gui.setText(`lbSlotIdx${k}`, r ? pad3(r.roomId + 1) : "");

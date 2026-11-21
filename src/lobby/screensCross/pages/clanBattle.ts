@@ -132,20 +132,20 @@ export class ClanBattle {
   private wire(): void {
     const p = this.phase, l = this.lobby;
     // the Batalha tab: create a team with the picked organization, join a listed team
-    this.button(p, "clanBattleMakeTeamEntryButton", () => void this.create(), () => !this.myMatchId);
+    this.button(p, "clanBattleMakeTeamEntryButton", () => void this.create(), () => this.myMatchId === null);
     for (let i = 1; i <= MAKE_ROWS; i++) {
-      this.button(p, `clanBattleMakeTeamJoin${i}`, () => void this.join(this.teams[this.makeTop + i - 1]?.matchId ?? -1), () => !this.myMatchId && !!this.teams[this.makeTop + i - 1]);
+      this.button(p, `clanBattleMakeTeamJoin${i}`, () => void this.join(this.teams[this.makeTop + i - 1]?.matchId ?? -1), () => this.myMatchId === null && !!this.teams[this.makeTop + i - 1]);
     }
-    this.button(p, "clanBattleMakeTeamComboButton", () => this.toggleDrop("make"), () => !this.myMatchId);
+    this.button(p, "clanBattleMakeTeamComboButton", () => this.toggleDrop("make"), () => this.myMatchId === null);
     p.get("clanBattleMakeTeamScrollList")?.el.addEventListener("wheel", (e) => { e.preventDefault(); this.scrollMake(Math.sign(e.deltaY)); }, { passive: false });
     // the battle lobby: my team (organization, name, chat, leave), the team list (search, view all, match) and my clan
     this.button(l, "clanBattleLobbyMyTeamTypeComboButton", () => this.toggleDrop("type"), () => this.isLeader() && !this.queued);
     this.button(l, "clanBattleLobbyTeamListViewAll", () => void this.refreshList());
     this.button(l, "clanBattleLobbyTeamListQuickButton", () => void this.quick(), () => this.queued || (this.isLeader() && this.teamFull()));
-    this.button(l, "clanBattleLobbyTeamListLeaveButton", () => this.askLeave(), () => !!this.myMatchId);
+    this.button(l, "clanBattleLobbyTeamListLeaveButton", () => this.askLeave(), () => this.myMatchId !== null);
     this.button(l, "clanBattleLobbyTeamListSearchButton", () => this.draw());
     for (let i = 1; i <= LIST_ROWS; i++) {
-      this.button(l, `clanBattleLobbyTeamMatchButton${i}`, () => void this.join(this.rowTeam(i)?.matchId ?? -1), () => !this.myMatchId && !!this.rowTeam(i));
+      this.button(l, `clanBattleLobbyTeamMatchButton${i}`, () => void this.join(this.rowTeam(i)?.matchId ?? -1), () => this.myMatchId === null && !!this.rowTeam(i));
       onClick(l, `clanBattleLobbyTeamFilter${i}`, () => { this.selected = this.listTop + i - 1; this.draw(); });
     }
     l.get("clanBattleLobbyTeamListFrame")?.el.addEventListener("wheel", (e) => { e.preventDefault(); this.scrollList(Math.sign(e.deltaY)); }, { passive: false });

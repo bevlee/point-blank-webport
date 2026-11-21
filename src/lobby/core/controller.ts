@@ -1,8 +1,8 @@
-// PB 2017 lobby flow without DOM: Auth login (account-api token) -> server/channel list -> USER_ENTER -> lobby
+// PB 2017 lobby flow without DOM: Auth login (account-api token) -> automatic lobby connection -> USER_ENTER -> lobby
 // (2588 rooms/players) -> create/join room (the existing src/ui/roomScreen.ts RoomScreen, only called) -> battle
 // (boot.ts playBattle via deps.onBattle) -> room -> lobby; inventory (6149/6150) and shop (1029/1045) through // MetaSession. No drawing here: every state change calls deps.render and the Point Blank Cross shell (screensCross/app.ts)
 // repaints its i3Gui windows from this state; clicks come back by the original control names (click(placement, control)).
-import { AuthClient, gameTargetForServer, type ChannelListInfo, type GameServerInfo, type LoginResult } from "../../net/authClient.ts";
+import { AuthClient, gameTargetForServer, CHANNEL_TYPE_CLAN, type GameServerInfo, type LoginResult } from "../../net/authClient.ts";
 import { GameClient } from "../../net/gameClient.ts";
 import type { AuthMeta } from "../../net/metaAuth.ts";
 import type { PbBattleNet } from "../../net/battle.ts";
@@ -10,7 +10,7 @@ import { RoomOp, WIRE_READY, type RoomClient, type RoomPlayerInfo } from "../../
 import { hideBattleLoading, showBattleLoading } from "../../game/battleLoading.ts";
 import { RoomScreen, type RoomScreenHost } from "../../ui/roomScreen.ts";
 import type { Rgba } from "../../ui/roomCountdown.ts";
-import { UI_CLICK_SELECT, UI_ITEM_EQUIP, UI_SERVER_CONNECT, UI_SERVER_ENTER, playUiSound } from "../../ui/uiClick.ts";
+import { UI_CLICK_SELECT, UI_ITEM_EQUIP, playUiSound } from "../../ui/uiClick.ts";
 import { respawnEquipFor, respawnWithLoadout } from "../../ui/lobbyScreen.ts";
 import { enforceRoomWeapons } from "../../game/respawnSelect.ts";
 import { AVAILABLE_MAPS, loadMapIndex, mapFromRoomMapId, mapIndexEntry, type MapId } from "../../config.ts";
@@ -203,7 +203,7 @@ import { LoadoutStore } from "../equipment/LoadoutStore.ts";
 export class Lobby2017 {
   loadouts: LoadoutStore | null = null;
   selectingLoadout = false;
-  page: Page = "channels";
+  page: Page = "connecting";
   auth: AuthClient | null = null;
   game: GameClient | null = null;
   login: LoginResult | null = null;
@@ -245,16 +245,14 @@ export class Lobby2017 {
   cosmeticUse: ((it: InventoryItem) => boolean) | null = null;
   /** start countdown lock of the ready room (RoomCountdown, exe 0x8f0530), see roomLocked */
   private roomLock = false;
-  servers: GameServerInfo[] = [];
+  private servers: GameServerInfo[] = [];
   server: GameServerInfo | null = null;
-  channels: ChannelListInfo | null = null;
   channelId = 0;
   /** the room in use came from the clan-war pairing (adoptClanRoom): its battle is a clan match (boot.ts isClanMatch) */
   clanPairing = false;
   /** type of the channel the session is in (ChannelType, authClient CHANNEL_TYPE_CLAN); null outside a channel */
   get channelType(): number | null { return this.server?.channelTypes[this.channelId] ?? null; }
   log: string[] = [];
-  chSelected = 0;
   roomSel = -1;
   /** Cross: lobby user picked by Buscar (community.ts findFriend, exe 0x885b70); by nick, null = none. app.ts paintLobby shows it */
   lobbyPick: string | null = null;
@@ -299,7 +297,7 @@ export class Lobby2017 {
   /** Head / face / beret on the chara preview: the equipped ones, the selected part item (inventory / shop) in its slot. */
   private previewEquip(): { head: number; face: number; beret: number } | undefined {
     const s = this.session;
-    if (!s) return this.page === "channels" ? this.peek()?.gear : undefined; // server / channel pages: the 2453 loadout
+    if (!s) return this.page === "connecting" ? this.peek()?.gear : undefined; // connecting: the 2453 loadout
     const ins = this.page === "room" ? this.inspect : null;
     if (ins) return { head: ins.equip[EquipSlot.Head] ?? 0, face: ins.equip[EquipSlot.Face] ?? 0, beret: ins.equip[EquipSlot.Beret] ?? 0 };
     const eq = s.player.equipPairs();
@@ -319,17 +317,16 @@ export class Lobby2017 {
 
   async start(): Promise<void> {
     await loadLobbyData();
-    this.page = "channels";
+    this.page = "connecting";
     this.busy = true;
     this.loading = T.loadConnect;
     this.say(`${S.waitState} (${this.deps.username})`);
     try {
       await this.loginAuth();
-      this.busy = false;
-      if (this.servers.length === 1) await this.pickServer(this.servers[0]);
-      else { this.loading = null; this.channels = null; this.server = null; this.chSelected = 0; this.draw(); }
+      await this.connectLobby();
     } catch (e) {
       this.busy = false;
+      this.teardown();
       this.fail(e, () => this.deps.onExit());
     }
   }
@@ -401,33 +398,29 @@ export class Lobby2017 {
     this.game = null;
   }
 
-  // ------------------------------------------------------------------------------------------ servers / channels
+  // ------------------------------------------------------------------------------------------ lobby connection
 
-  private async pickServer(s: GameServerInfo): Promise<void> {
-    if (!this.auth) return;
-    this.busy = true;
-    this.loading = T.loadServer;
-    this.server = s;
-    this.draw();
-    const info = await this.auth.getChannels(s.index).catch(() => null);
-    const n = info?.channelPlayers.length || s.channelTypes.length || 10;
-    this.channels = info ?? { channelPlayers: new Array(n).fill(0), maxPerChannel: 0 };
-    this.chSelected = 0;
-    this.busy = false;
-    this.loading = null;
-    this.draw();
+  /** One public destination keeps the room list and lobby chat shared by every player. */
+  private async connectLobby(destination?: { server: number; channel: number }): Promise<void> {
+    const serverId = destination?.server ?? 1, channelId = destination?.channel ?? 0;
+    const server = this.servers.find(s => s.index === serverId && s.online);
+    if (!server || !this.login) throw new Error("The lobby is unavailable. Please try again.");
+    if (server.maxPlayers > 0 && server.players >= server.maxPlayers) throw new Error("The lobby is full. Please try again shortly.");
+    this.server = server;
+    await this.joinChannel(server, this.login, channelId);
   }
 
-  async enterChannel(channelId: number): Promise<void> {
-    if (!this.server || !this.login || !this.auth || this.busy) return;
-    this.busy = true;
-    try {
-      await this.joinChannel(this.server, this.login, channelId);
-    } catch (e) {
-      this.busy = false;
-      this.teardown();
-      this.fail(e, () => this.deps.onExit());
-    }
+  /** Clan battles still use their protocol channel; players enter it through Battles, not a server picker. */
+  async openClanBattleChannel(): Promise<boolean> {
+    if (this.busy || this.page !== "clan") return false;
+    if (this.channelType === CHANNEL_TYPE_CLAN) return true;
+    if (this.roomScreen) { this.say("Leave the room before entering clan battles.", true); return false; }
+    const server = this.servers.find(s => s.online && s.channelTypes.includes(CHANNEL_TYPE_CLAN));
+    if (!server) { this.say("Clan battles are unavailable. Please try again later.", true); return false; }
+    const channel = server.channelTypes.indexOf(CHANNEL_TYPE_CLAN);
+    this.teardown();
+    await this.reconnect({ server: server.index, channel, page: "clan" });
+    return this.page === "clan" && this.channelType === CHANNEL_TYPE_CLAN;
   }
 
   /** Auth USER_LEAVE -> Game USER_ENTER on `s` -> channel -> lobby. Throws; the caller tears down. */
@@ -472,20 +465,8 @@ export class Lobby2017 {
     this.busy = false;
     this.loading = null;
     this.page = "lobby";
-    this.say(`${T.welcome} ${T.server} ${s.index} - ${T.channel} ${channelId + 1}`);
+    this.say("Welcome to the lobby");
     this.startPolling();
-  }
-
-  /** Main's Back in the lobby: new Auth login (the server throttles connects per IP) and the server/channel list. */
-  private async changeServer(): Promise<void> {
-    this.teardown();
-    this.page = "channels";
-    this.channels = null;
-    this.busy = true;
-    this.loading = T.loadConnect;
-    this.say(S.waitState);
-    await new Promise((r) => setTimeout(r, 5500));
-    if (!this.disposed) await this.start();
   }
 
   /** The Auth (server list) or Game (lobby, room, battle) session closed under us. */
@@ -522,8 +503,7 @@ export class Lobby2017 {
     this.reconnecting = true;
     try {
       for (const ms of RECONNECT_DELAYS_MS) {
-        this.page = "channels";
-        this.channels = null;
+        this.page = "connecting";
         this.msg = null;
         this.create = null;
         this.pwdPrompt = null;
@@ -536,16 +516,9 @@ export class Lobby2017 {
         if (this.disposed) return;
         try {
           await this.loginAuth();
-          const s = to ? this.servers.find((x) => x.index === to.server) : undefined;
-          if (s && to) {
-            this.server = s;
-            await this.joinChannel(s, this.login!, to.channel);
-            if (to.page === "inventory" || to.page === "shop") this.openMenu(to.page);
-          } else {
-            this.busy = false;
-            if (this.servers.length === 1) await this.pickServer(this.servers[0]);
-            else { this.loading = null; this.server = null; this.chSelected = 0; this.draw(); }
-          }
+          await this.connectLobby(to ?? undefined);
+          if (to?.page === "inventory" || to?.page === "shop") this.openMenu(to.page);
+          else if (to?.page === "clan") this.openClan();
           return;
         } catch (e) {
           console.warn("[lobby] reconnect failed", e);
@@ -708,6 +681,11 @@ export class Lobby2017 {
     this.roomLock = false;
     this.inspect = null;
     this.roomTab = "map";
+    if (this.server && (this.server.index !== 1 || this.channelId !== 0)) {
+      this.teardown();
+      void this.reconnect(null);
+      return;
+    }
     this.page = "lobby";
     this.roomSel = -1;
     this.draw();
@@ -815,10 +793,7 @@ export class Lobby2017 {
     if (p === "buy") return this.onBuy(c);
     if (p === "hit" && c.startsWith("buy:")) return this.onBuy(`i3UIRadio_SBN_0${Number(c.slice(4)) + 1}`);
     switch (this.page) {
-      case "channels":
-        if (p === "list" && c === "i3UIButtonComposed30") this.activate(this.chSelected);
-        else if (p === "list" && c === "i3UIButtonComposed3") void (this.channels && this.server ? this.pickServer(this.server) : this.start());
-        return;
+      case "connecting": return;
       case "lobby":
         if (p === "hit" && c.startsWith("sort:")) {
           const key = c.slice(5) as RoomSort["key"];
@@ -855,16 +830,14 @@ export class Lobby2017 {
   }
 
   listSelect(list: string, i: number): void {
-    if (list === "channels") { this.chSelected = i; this.draw(); }
-    else if (list === "rooms") { this.roomSel = i; this.draw(); }
+    if (list === "rooms") { this.roomSel = i; this.draw(); }
     else if (list === "modes" && this.create && !this.create.busy) { this.create.dd = null; this.setMode(this.create, modeGroups(this.create).normal[i]); this.draw(); }
     else if (list === "red" || list === "blue") this.pickTeamSlot(list, i);
     else if (list === "msets" && this.page === "profile" && this.profileTab === "mission") this.pickMissionSet(tabSets(this.missionState(), this.mission.tab)[i] ?? 0);
   }
 
   listActivate(list: string, i: number): void {
-    if (list === "channels") this.activate(i);
-    else if (list === "rooms") { this.roomSel = i; this.joinSelected(); }
+    if (list === "rooms") { this.roomSel = i; this.joinSelected(); }
     else if (list === "modes") this.listSelect(list, i);
     else if (list === "red" || list === "blue") this.pickTeamSlot(list, i);
   }
@@ -904,12 +877,6 @@ export class Lobby2017 {
     return id === "chat" ? this.submitChat(value) : false;
   }
 
-  private activate(i: number): void {
-    if (this.busy) return;
-    if (this.channels) { playUiSound(UI_SERVER_ENTER); void this.enterChannel(i); }
-    else if (this.servers[i]) { playUiSound(UI_SERVER_CONNECT); void this.pickServer(this.servers[i]); }
-  }
-
   /** Visitar (exe 0x884d70 -> fila 0x78fb50 -> executor 0x515250, sala do amigo, estado 6; ver community.ts). Mesmo canal:
    * entra pela lista da lobby. Outro canal ou servidor: sai do canal e entra no do amigo pelo caminho do reconnect
    * (loginAuth + joinChannel), depois entra na sala. [INFERIDO] o exe troca de canal dentro do vtable+0x104 da tela
@@ -927,6 +894,7 @@ export class Lobby2017 {
     if (!this.servers.some((s) => s.index === server)) return this.say(T.notExistRoom, true);
     this.teardown();
     await this.reconnect({ server, channel, page: "lobby" });
+    if (this.server?.index !== server || this.channelId !== channel) return;
     const end = Date.now() + 6000;
     while (this.page === "lobby" && !this.roomScreen && !this.disposed && Date.now() < end) {
       if (this.sortedRooms().some((r) => r.roomId === roomId)) break;
@@ -967,16 +935,14 @@ export class Lobby2017 {
     if (c === B.exit) { this.teardown(); this.deps.onExit(); return; }
     if (this.busy) return;
     if (c === B.back) {
-      if (this.page === "channels") { if (this.channels && this.servers.length > 1) { this.channels = null; this.chSelected = 0; this.draw(); } }
-      else if (this.page === "lobby") void this.changeServer();
-      else if (this.page === "room") void this.leaveRoom();
-      else this.closeMenu();
+      if (this.page === "room") void this.leaveRoom();
+      else if (this.page !== "lobby" && this.page !== "connecting") this.closeMenu();
       return;
     }
     if (c === B.options) { this.deps.onOptions?.(); return; }
     if (c === B.clan) { this.openClan(); return; }
-    if (c === B.inventory && this.page !== "channels") this.openMenu("inventory");
-    else if (c === B.shop && this.page !== "channels") this.openMenu("shop");
+    if (c === B.inventory && this.page !== "connecting") this.openMenu("inventory");
+    else if (c === B.shop && this.page !== "connecting") this.openMenu("shop");
   }
 
   private onPopup(c: string): void {
@@ -1724,7 +1690,7 @@ Would you like to use this item now?`, onOk: () => void this.useBought(bought), 
   }
 
   chrome(): Chrome {
-    const p = this.player ?? (this.page === "channels" ? this.peek()?.player : null) ?? null, pr = p?.state.profile, w = p?.state.wallet, rec = p?.state.record?.season;
+    const p = this.player ?? (this.page === "connecting" ? this.peek()?.player : null) ?? null, pr = p?.state.profile, w = p?.state.wallet, rec = p?.state.record?.season;
     const kills = rec?.kills ?? 0, deaths = rec?.deaths ?? 0;
     return {
       ...EMPTY_CHROME,
@@ -1738,8 +1704,7 @@ Would you like to use this item now?`, onOk: () => void this.useBought(bought), 
       record: rec ? `${rec.wins}V ${rec.loses}D` : "",
       kd: rec ? `${kills}/${deaths}` : "",
       headshot: rec && kills ? `${Math.round((rec.headshots / kills) * 100)}%` : "",
-      serverLabel: this.server ? `${T.server} ${this.server.index}${this.game ? ` - ${T.channel} ${this.channelId + 1}` : ""}` : "",
-      canBack: this.page !== "channels" || (!!this.channels && this.servers.length > 1),
+      canBack: this.page !== "connecting" && this.page !== "lobby",
     };
   }
 
@@ -1747,7 +1712,7 @@ Would you like to use this item now?`, onOk: () => void this.useBought(bought), 
   showroom(): { itemId: number; weaponId: number } {
     const s = this.session, none = { itemId: 0, weaponId: 0 };
     switch (this.page) {
-      case "channels": {
+      case "connecting": {
         // the 2453 loadout of the Auth meta; [RECRIADO] basic character / K-2 when it has none; nothing until the Auth meta is in (no default-then-real flicker)
         const pk = this.peek();
         return pk ? { itemId: pk.chara || 601005, weaponId: pk.weapon || 103004 } : none;

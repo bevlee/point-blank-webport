@@ -5,6 +5,7 @@
 // a ClanClient request (src/net/clanClient.ts) followed by a redraw. Back / Sair go through the controller (closeMenu, 771).
 // Battle tab and its lobby step: clanBattle.ts. Not ported: history (no season data on the server), chat, emblem, rename,
 // forum address, rules (868) and the note to members (892) [LACUNA]. The mbClan gate (+0x400) is not applied.
+import { CHANNEL_TYPE_CLAN } from "../../../net/authClient.ts";
 import { ClanClient, type ClanDetail, type ClanEvent, type ClanJoinRequest, type ClanMemberRow, type ClanStatus } from "../../../net/clanClient.ts";
 import { jsonOnce } from "../../../jsonOnce.ts";
 import type { GNode, I3Gui } from "../../ui/i3Gui.ts";
@@ -136,6 +137,7 @@ export class ClanPage {
   private off: (() => void) | null = null;
   private visible = false;
   private busy = false;
+  private refreshTask: Promise<void> | null = null;
   // my account's clan (ENTER 770) and the lists of my clan
   private clanId = 0;
   private access = 0;
@@ -352,7 +354,19 @@ export class ClanPage {
   }
 
   /** 769: the membership (clanId, access; a pending applicant has an id with access 0) and the data of the menu */
-  private async refresh(): Promise<void> {
+  private refresh(): Promise<void> {
+    if (this.refreshTask) return this.refreshTask;
+    const connection = this.ctx.ctl.session?.connection;
+    this.refreshTask = this.readClan().catch(e => {
+      if (this.visible && this.ctx.ctl.session?.connection === connection) {
+        console.warn("[cross] clan refresh", e);
+        this.say("Could not load clan information. Please try again.");
+      }
+    }).finally(() => { this.refreshTask = null; });
+    return this.refreshTask;
+  }
+
+  private async readClan(): Promise<void> {
     const c = this.api();
     if (!c || this.busy) return;
     const r = await c.enter();
@@ -508,6 +522,13 @@ export class ClanPage {
   // ---- member window ----
 
   private setTab(t: Tab): void {
+    if (t === "battle" && this.ctx.ctl.channelType !== CHANNEL_TYPE_CLAN) {
+      void (this.refreshTask ?? Promise.resolve())
+        .then(() => this.ctx.ctl.openClanBattleChannel())
+        .then(ready => { if (ready) this.setTab("battle"); })
+        .catch(e => { console.warn("[cross] clan battle channel", e); this.say("Could not open clan battles. Please try again."); });
+      return;
+    }
     if (t === "management" && !canManage(this.access)) { this.say(this.str("STBL_IDX_CLAN_REQUIRE_MASTER_OR_STAFF", "Commander or staff privileges required.")); return; }
     this.tab = t;
     if (t === "search") { this.search.reset(); void this.search.loadNext(); }

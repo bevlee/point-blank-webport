@@ -233,6 +233,8 @@ export class Game implements BotHost {
   private levelName: string;
   private time = 0;
   private respawnAt = new Map<string, number>();
+  /** server-hosted match: the last player hit on us, for the weapon of the death the server declares (onServerHp) */
+  private lastServerHitBy: { attacker: Actor | null; weapon: string } | null = null;
   /** Respawn HUD + weapon change panel (respawnMenu.ts); null until its scenes load. */
   respawnMenu: RespawnMenu | null = null;
   private appliedLoadout: RespawnLoadout | null = null;
@@ -824,7 +826,7 @@ export class Game implements BotHost {
       // the victim's own state decides death: a predicted kill here would flip alive false -> true on the next state,
       // which RemoteActor.apply reads as a respawn (spawn-protection blink + helmet back on the head next to the dropped one)
       target.alive = wasAlive;
-      const ev: HitEvent = { attackerId: attacker.id, victimId: target.id, weapon, zone, baseDamage: base, preScaled, helmetPenetrate: pen, falloff, point: [point.x, point.y, point.z], t: now, helmetBlocked: res.helmetBlocked };
+      const ev: HitEvent = { attackerId: attacker.id, victimId: target.id, weapon, zone, baseDamage: base, preScaled, helmetPenetrate: pen, falloff, point: [point.x, point.y, point.z], t: now, helmetBlocked: res.helmetBlocked, dealt: res.dealt };
       this.net.sendHit(ev);
       // shooter side: the remote victim's helmet flies off here too; its banner + voice are the victim's own
       if (res.helmetBlocked) this.popHelmet(target, attacker);
@@ -2002,7 +2004,14 @@ export class Game implements BotHost {
       }
       if (!this.me.alive) return;
       const attacker = this.actorById(e.attackerId);
-      const res = computeDamage({ target: this.me, attacker, base: e.baseDamage, zone: e.zone, helmetPenetrate: e.helmetPenetrate, falloff: e.falloff, preScaled: e.preScaled, now: this.time, room: this.room });
+      // server-hosted match: a player's hit carries the damage the server already applied (its HpSync follows, onServerHp);
+      // here it only drives the helmet, the flinch and the sounds. An AI seat's hit is still ours to apply.
+      const drawOnly = !!this.net.serverAuthoritative && attacker?.kind !== "bot";
+      const before = { hp: this.me.hp, alive: this.me.alive };
+      const res = drawOnly
+        ? computeDamage({ target: this.me, attacker, base: e.baseDamage, zone: e.zone, helmetPenetrate: 100, falloff: 1, preScaled: true, now: this.time, room: this.room })
+        : computeDamage({ target: this.me, attacker, base: e.baseDamage, zone: e.zone, helmetPenetrate: e.helmetPenetrate, falloff: e.falloff, preScaled: e.preScaled, now: this.time, room: this.room });
+      if (drawOnly) { this.me.hp = before.hp; this.me.alive = before.alive; this.lastServerHitBy = { attacker, weapon: e.weapon }; }
       if (res.blocked) return;
       // victim side: our own helmet state decides (computeDamage pops it); the attacker's helmet roll is already in
       // the damage (src/weapons), so 0 dealt = the helmet saved us -> HELMET PROTECTION is ours
@@ -2016,7 +2025,17 @@ export class Game implements BotHost {
         this.charSfx?.hurt(this.me.feet(new THREE.Vector3()), e.zone === "head", true);
         this.charSfx?.ownHurt(this.me.feet(new THREE.Vector3()), this.myCharaIsFemale(), this.me.hp, res.dealt);
       }
-      if (res.killed) this.onDeath(this.me, attacker, e.weapon, res.headshot);
+      if (res.killed && !drawOnly) this.onDeath(this.me, attacker, e.weapon, res.headshot);
+    });
+    // server-hosted match: the server's HP of our player, and our death when it says so
+    this.net.onServerHp?.((e) => {
+      if (!this.me.alive) return;
+      this.me.hp = Math.min(this.me.maxHp, Math.max(0, e.hp));
+      if (e.hp > 0 || !e.death) return;
+      const by = e.death.killerId ? this.actorById(e.death.killerId) : null;
+      const weapon = this.lastServerHitBy && (!by || this.lastServerHitBy.attacker === by) ? this.lastServerHitBy.weapon : "";
+      this.lastServerHitBy = null;
+      this.onDeath(this.me, by, weapon, e.death.headshot);
     });
     const pw = this.pbWeapons();
     // medical kit (WeaponSystem.updateHeal): the local character is a target while hurt, a hit heals it up to max HP

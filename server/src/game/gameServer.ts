@@ -37,6 +37,7 @@ import * as voteKick from "./voteKick.ts";
 import * as voteLeader from "./voteLeader.ts";
 import { handleBugReport } from "./bugReports.ts";
 import { signalGate, signalKey } from "../web/signal.ts";
+import { matchHooks } from "../match/serverMatch.ts";
 import { readEnterTicket } from "../web/signalTicket.ts";
 
 const log = (m: string) => console.log(`${new Date().toISOString()} [game-ts] ${m}`);
@@ -733,10 +734,14 @@ export async function startGameServers(): Promise<net.Server[]> {
   sh.social.online = onlineAccounts;
   sh.social.byNick = lookup.byNick;
   sh.social.byPid = lookup.byPid;
-  signalGate.allow = (key, role, slot, pid) => {
-    for (const st of states.values()) for (const chn of st.channels) for (const r of chn.rooms) if (signalKey(r.uniqueRoomId, r.seed) === key) return r.maySignal(role, slot, pid);
-    return false;
+  const roomByKey = (key: string) => {
+    for (const st of states.values()) for (const chn of st.channels) for (const r of chn.rooms) if (signalKey(r.uniqueRoomId, r.seed) === key) return r;
+    return null;
   };
+  signalGate.allow = (key, role, slot, pid) => roomByKey(key)?.maySignal(role, slot, pid) ?? false;
+  // the server-hosted match (PB_MATCH_MODE=server): the leader's link carries the bots; the core's deaths are the kills
+  matchHooks.leader = (key) => roomByKey(key)?.leader ?? -1;
+  matchHooks.game = (key, m) => { const r = roomByKey(key); if (r) rh.fromServerMatch(r, m); };
   const rows = await db.systemServers();
   servers = rows.map((s) => ({ id: s.id, state: s.state, host: config.advertiseHost || s.host, port: s.port, type: parseEnum(SChannelType, s.type), maxPlayers: s.maxPlayers, lastPlayers: 0, channelPlayers: s.channelPlayers }));
   const out: net.Server[] = [];

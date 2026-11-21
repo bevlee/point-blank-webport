@@ -63,6 +63,14 @@ Login flow: connection, `CONNECT_ACK` (session key), login on Auth, switch to Ga
 - `db/init/001_init.sql` loads when the volume is empty (first start). It contains the schema and game data (shop, maps, missions, titles, channels), with no accounts or progress. To change the schema or the data, generate a new init from the database and test it on a clean start. To reset, run `docker compose down -v`.
 - The database has no test user. Accounts are created through registration.
 
+## Server-hosted match (default)
+
+With `PB_MATCH_MODE=server` (the default), the match core (`src/host/matchCore.ts`) runs in the server process: one core per running battle (`server/src/match/serverMatch.ts`). Every player, the leader included, opens one WebSocket to `/match` with the same battle ticket as `/signal` (`src/net/serverMatch.ts`). Game feeds the core the respawns, the start and the end of the battle.
+
+The server owns players' HP and deaths. The shooter's client sends its hit as `ObjectType.User` with the damage it computed. The core caps that damage against the weapon (body: the item damage +30 % or the pef damage x part rate x coupon; head: 1.5 x), refuses team damage, and applies it. The victim's HP comes back as HpSync. A death goes straight to Game (`fromServerMatch`), so `DEATH_REQ` is only taken for a death with no killer (a fall). Not on the server yet: the AI seats (the leader's client still simulates them), fall damage, and checking where the shot was fired from (the core trusts the hit position).
+
+A WebSocket is TCP: a lost packet holds back the ones behind it. With `PB_MATCH_MODE=p2p` the leader-hosted match below comes back.
+
 ## P2P
 
 The room and the result stay on the server (Game). Only the match datagrams travel between the players:

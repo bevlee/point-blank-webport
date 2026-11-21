@@ -7,6 +7,8 @@ import { PacketReader, PacketWriter } from "../../src/net/packet.ts";
 import { RoomCondition } from "../src/game/roomModel.ts";
 import { battleRoom } from "./fakeRoom.ts";
 import type { GameClient } from "../src/game/gameServer.ts";
+// these cover the P2P trust path (client DEATH_REQ / leader 5166); the server-hosted match is src/p2p/test/serverMatch.test.ts
+process.env.PB_MATCH_MODE = "p2p";
 
 const u16 = (b: Uint8Array, at: number) => b[at] | (b[at + 1] << 8);
 

@@ -243,6 +243,8 @@ export interface MatchEndpoint {
   roomSeed: number;
   /** /signal proof for this battle and slot (server text frame sent just before our 5130; undefined from a non-web server) */
   signalTicket?: string;
+  /** who hosts the match (the ticket's text frame) */
+  matchMode?: "server" | "p2p";
 }
 
 /** the account's clan at the end of the match (5140 own record, server ClanModel): grade = `rank`, emblem = `logo` (D, 0xFFFFFFFF = none) */
@@ -840,7 +842,7 @@ export class RoomClient {
     const port = r.readH();
     const uniqueRoomId = r.readD();
     const roomSeed = r.readD();
-    this.endpoint = { slot, udpType, ip, port, uniqueRoomId, roomSeed, signalTicket: this.game.conn.signalTicket ?? undefined };
+    this.endpoint = { slot, udpType, ip, port, uniqueRoomId, roomSeed, signalTicket: this.game.conn.signalTicket ?? undefined, matchMode: this.game.conn.matchMode ?? undefined };
     return this.endpoint;
   }
 

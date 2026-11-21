@@ -7,6 +7,8 @@ import { PacketReader, PacketWriter } from "../../src/net/packet.ts";
 import { SlotState } from "../src/game/roomModel.ts";
 import { battleRoom } from "./fakeRoom.ts";
 import type { GameClient } from "../src/game/gameServer.ts";
+// a client DEATH_REQ kill (P2P trust path); the server-hosted match is src/p2p/test/serverMatch.test.ts
+process.env.PB_MATCH_MODE = "p2p";
 
 test("CT kills the last FR with a GM watching from seat 16: round ends for CT (5155)", () => {
   const f = battleRoom(2);

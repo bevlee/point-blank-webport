@@ -75,6 +75,14 @@ export interface HitEvent {
   t: number;
   /** Helmet blocked the hit (it pops off) — computed by attacker's client, trusted by victim's client */
   helmetBlocked?: boolean;
+  /** the attacker's computeDamage result: what the server-hosted match applies (and caps) to the victim's HP */
+  dealt?: number;
+}
+
+/** The server-hosted match's HP of the local player (EVENTS_ACTION HpSync), with the death when it reached 0. */
+export interface ServerHpEvent {
+  hp: number;
+  death?: { killerId: string | null; headshot: boolean };
 }
 
 export interface KillEvent {
@@ -144,6 +152,9 @@ export interface NetAdapter {
   sendKill(e: KillEvent): void;
   onRemoteState(cb: (s: PlayerState) => void): () => void;
   onRemoteHit(cb: (e: HitEvent) => void): () => void;
+  /** true: the server owns HP and deaths of players (server-hosted match): a remote hit on us is only drawn, onServerHp decides */
+  readonly serverAuthoritative?: boolean;
+  onServerHp?(cb: (e: ServerHpEvent) => void): () => void;
   onRemoteKill(cb: (e: KillEvent) => void): () => void;
   onRemoteLeave(cb: (id: string) => void): () => void;
   /** Weapons for the next BATTLE_RESPAWN_REQ: [primary, secondary, melee, throw, special] (respawnSelect.ts). */

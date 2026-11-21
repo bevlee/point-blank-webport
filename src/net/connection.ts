@@ -71,6 +71,8 @@ export class PbConnection {
   onClose: ((reason: string) => void) | null = null;
   /** Game: the /signal ticket of the last PRESTARTBATTLE */
   signalTicket: string | null = null;
+  /** who hosts this battle's match (same text frame as the ticket): "server" = /match, "p2p" = the leader over WebRTC */
+  matchMode: "server" | "p2p" | null = null;
 
   private ws: WebSocket | null = null;
   private decoder = new FrameDecoder();
@@ -200,8 +202,11 @@ export class PbConnection {
   /** server side messages (server/src/net/tcpSession.ts sendText); unknown ones are ignored */
   private onText(s: string): void {
     try {
-      const m = JSON.parse(s) as { t?: unknown; ticket?: unknown; pid?: unknown };
-      if (m.t === "signalTicket" && typeof m.ticket === "string") this.signalTicket = m.ticket;
+      const m = JSON.parse(s) as { t?: unknown; ticket?: unknown; pid?: unknown; match?: unknown };
+      if (m.t === "signalTicket" && typeof m.ticket === "string") {
+        this.signalTicket = m.ticket;
+        this.matchMode = m.match === "server" ? "server" : "p2p"; // a server without the field only knows P2P
+      }
       else if (m.t === "enterTicket" && typeof m.ticket === "string" && typeof m.pid === "string" && /^\d{1,20}$/.test(m.pid)) enterTickets.set(BigInt(m.pid), m.ticket);
     } catch { /* not ours */ }
   }

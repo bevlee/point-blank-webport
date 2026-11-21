@@ -311,7 +311,7 @@ export class RoomScreen {
       current();
       const roster = r.slots.filter((s) => s.state >= 12).map((s) => ({ slot: s.slot, name: s.nick || `slot ${s.slot + 1}`, team: (s.slot % 2) as 0 | 1 }));
       const net = new PbBattleNet({
-        session: { uniqueRoomId: ep.uniqueRoomId, roomSeed: ep.roomSeed, slot: ep.slot, accountId: this.accountIdByte(), signalTicket: ep.signalTicket },
+        session: { uniqueRoomId: ep.uniqueRoomId, roomSeed: ep.roomSeed, slot: ep.slot, accountId: this.accountIdByte(), signalTicket: ep.signalTicket, matchMode: ep.matchMode },
         roster, serverUrl: this.host.serverUrl ?? defaultServerUrl(), room: r,
         p2p: { relayOnly: import.meta.env?.VITE_RELAY_ONLY === "1" },
       });

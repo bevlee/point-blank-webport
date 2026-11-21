@@ -29,6 +29,8 @@ import { applyClanMatchResult, broadcastRosterOf, checkClanMatchRestrict, clanMa
 import type { GameClient } from "./gameServer.ts";
 import { signalKey } from "../web/signal.ts";
 import { mintSignalTicket } from "../web/signalTicket.ts";
+import { matchEnd, matchMode, matchOpen, matchRemoveSlot, matchRespawn, matchStartTick } from "../match/serverMatch.ts";
+import type { GameSyncOut } from "../../../src/host/matchCore.ts";
 
 const log = (m: string) => console.log(`${new Date().toISOString()} [game-ts] ${m}`);
 export const roomOf = (a: Account | null): RoomModel | null => (a?.room as RoomModel | null) ?? null;
@@ -252,6 +254,7 @@ export function removePlayer(r: RoomModel, p: Account, warnAll: boolean, motive 
   const slot = r.getSlot(p.slotId);
   if (!slot) return;
   for (const hook of slotLeftHooks) hook(r, slot.id); // votes: cancel when the target / creator leaves
+  if (slot.state >= SlotState.LOAD) matchRemoveSlot(r.uniqueRoomId, r.seed, slot.id);
   let flag = false, host = false;
   if (slot.state >= SlotState.LOAD) {
     if (slot.id < 16 && slot.playerId > 0n) r.lastSeat.set(slot.playerId, slot.id);
@@ -572,7 +575,9 @@ export function handlePreStartBattle(c: GameClient, rd: PacketReader): void {
   if (s.id === r.leader && r.state < RoomState.PRE_BATTLE) { r.state = RoomState.PRE_BATTLE; r.updateRoomInfo(); } // [web] only forward (see LOADING_START)
   r.changeSlotState(s, SlotState.PRESTART, true);
   // [web] the /signal ticket of this account and slot, ahead of the 5130 that gives the client the room key
-  c.session.sendText({ t: "signalTicket", ticket: mintSignalTicket(signalKey(r.uniqueRoomId, r.seed), s.id, p.playerId) });
+  // match: "server" = connect to /match (serverMatch.ts), "p2p" = the leader hosts over WebRTC
+  matchOpen(r.uniqueRoomId, r.seed, { barefistOnly: r.stage === KNUCKLE_STAGE }, log);
+  c.session.sendText({ t: "signalTicket", ticket: mintSignalTicket(signalKey(r.uniqueRoomId, r.seed), s.id, p.playerId), match: matchMode() });
   c.session.send(rp.preStartBattleAck(p, r, true));
   if (s.id !== r.leader) send(L, rp.preStartBattleAck(p, r, false));
   startCounter(r, 1, p, s);
@@ -648,7 +653,7 @@ function executeSpawnReadyPlayers(r: RoomModel): void {
   }
   r.updateSlotsInfo();
   const dinos = getDinossaurs(r, false, -1);
-  if (opening) { r.battleStart = r.isDinoMode() ? now + 5 * 60000 : now; r.matchStart = now; setGameModeSpecificBars(r); }
+  if (opening) { r.battleStart = r.isDinoMode() ? now + 5 * 60000 : now; r.matchStart = now; setGameModeSpecificBars(r); matchStartTick(r.uniqueRoomId, r.seed); }
   const b1 = rp.roundPreStartAck(r, dinos), b2 = rp.roundStartAck(r), b3 = rp.recordAck(r);
   let dinoFlag = false;
   for (const s of r.slots) {
@@ -728,6 +733,15 @@ function respawnSlot(c: GameClient, p: Account, r: RoomModel | null, f: number[]
   if (wflags & 1) s.itemUsages.push(E.weaponExplosive);
   s.itemUsages.push(E.weaponSpecial, E.partHead, E.partFace, E.beretItem, E.accessoryId);
   const pkt = rp.respawnAck(r, s);
+  // the server-hosted match gets the RespawnSync the .NET Game sent Server.Match (EquipmentSync.SendUDPPlayerSync)
+  if (!s.specGM) {
+    matchRespawn(r.uniqueRoomId, r.seed, {
+      slot: s.id, respawnCount: s.spawnsCount & 0xff, accountId: Number(p.playerId & 0xffn),
+      charaId: r.validateTeam(s.team, s.team) === Team.FR ? E.charaRedId : E.charaBlueId,
+      weapons: { primary: E.weaponPrimary, secondary: E.weaponSecondary, melee: E.weaponMelee, explosive: E.weaponExplosive, special: E.weaponSpecial },
+      accessory: E.accessoryId,
+    });
+  }
   if (s.specGM) { if (s.firstRespawn) c.session.send(pkt); }
   else r.sendToPlayers(pkt, r.getAllPlayers(SlotState.BATTLE, 0));
   s.firstRespawn = false; // EquipmentSync UDP to the .NET Match (type 0 / 2) is not sent: no sync link from TS (P2P host handles it)
@@ -777,6 +791,14 @@ export function handleDeath(c: GameClient, rd: PacketReader): void {
   //(the C# only checked the killer slot, and not in AI rooms: `!bot && ...`)
   const bad = deathReqError(r, p, ks, k);
   if (bad) return strike(c, r, me, bad);
+  // server-hosted match: the core declares every hit kill (fromServerMatch); a client only reports its own death with no killer
+  // (fall, world, suicide). Not a strike: an old client in the same room still sends them.
+  if (matchMode() === "server" && !(suicide && k.killsCount === 1)) { guardLog(r, me, "DEATH_REQ ignored: the server match owns kills"); return; }
+  applyKill(r, ks, k, bot, suicide);
+}
+
+/** The kill accounting of a DEATH_REQ (client) or a core death (server-hosted match): score, kill flags, missions, 5136, goal. */
+function applyKill(r: RoomModel, ks: SlotModel, k: rp.FragInfo, bot: boolean, suicide: boolean): void {
   let score = 0;
   const weaponClass = Math.trunc(k.weapon / 100000);
   for (const f of k.frags) {
@@ -1033,6 +1055,11 @@ export function handleGeneratorInfo(c: GameClient, rd: PacketReader): void {
   if (!p || !r || r.roundTimer || r.state !== RoomState.BATTLE || (r.roomType !== RoomCondition.Destroy && r.roomType !== RoomCondition.Defense)) return;
   const s = r.getSlot(p.slotId);
   if (!s || s.state !== SlotState.BATTLE) return;
+  if (matchMode() === "server") return; // the server-hosted core reports the bars itself (fromServerMatch)
+  applyGeneratorInfo(r, bar1, bar2, dmg);
+}
+
+function applyGeneratorInfo(r: RoomModel, bar1: number, bar2: number, dmg: number[]): void {
   r.bar1 = bar1; r.bar2 = bar2;
   for (const x of r.slots) if (x.playerId > 0n && x.state === SlotState.BATTLE) { x.damageBar1 = dmg[x.id]; x.earnedEXP = Math.trunc(x.damageBar1 / 600); }
   r.sendToPlayers(rp.generatorInfoAck(r), r.getAllPlayers(SlotState.BATTLE, 0));
@@ -1114,6 +1141,7 @@ function followLeader(r: RoomModel): void {
 /** A player leaves the running match for the room (GIVEUPBATTLE, or the leader's loading / prestart counter running out). */
 function quitMatch(r: RoomModel, p: Account, s: SlotModel): void {
   for (const hook of slotLeftHooks) hook(r, s.id);
+  matchRemoveSlot(r.uniqueRoomId, r.seed, s.id);
   const bot = r.isBotMode();
   // The C# handler counts the quitter too, so its own team is never empty and LeaveEndBattlePVP (winner = the team left
   // with 0) could never run: in a 1v1 the one who stayed was stuck in a battle with nobody (issue #4). Counted without it.
@@ -1206,6 +1234,7 @@ function finishMatch(r: RoomModel, bot: boolean, w: number, roundEnd: boolean, n
       send(a, rp.endBattleAck(a, r, w, slotFlag, missionFlag, bot, data));
     }
   }
+  matchEnd(r.uniqueRoomId, r.seed);
   resetBattleInfo(r);
 }
 
@@ -1552,4 +1581,33 @@ export function handleRequestMain(c: GameClient): void {
     if (r.requestRoomMaster.length < need) r.sendToPlayers(rp.errAck(3612, p.slotId), all);
   }
   if (r.requestRoomMaster.length >= need) take();
+}
+
+// ---- server-hosted match ---------------------------------------------------------------------------------------------
+
+/** Match -> Game (SendMatchInfo) of the server-hosted match (../match/serverMatch.ts). A "death" is the core's own
+ * damage (MatchCore.simpleDeath on ObjectType.User hits): the same accounting as a DEATH_REQ, without a client to trust. */
+export function fromServerMatch(r: RoomModel, m: GameSyncOut): void {
+  if (m.t === "sabotage") {
+    // Destroy / Defence: the objectives' bars, what the leader's 5166 carried over P2P
+    if (!r.roundTimer && r.state === RoomState.BATTLE && (r.roomType === RoomCondition.Destroy || r.roomType === RoomCondition.Defense)) applyGeneratorInfo(r, m.bar1, m.bar2, m.slotDamage);
+    return;
+  }
+  if (m.t !== "death" || r.roundTimer || r.state < RoomState.BATTLE) return;
+  const ks = r.getSlot(m.killerSlot);
+  if (!ks || ks.state < SlotState.BATTLE) return;
+  const frags = m.deaths.filter((d) => {
+    const v = r.getSlot(d.slot);
+    return !!v && v.state === SlotState.BATTLE && v.playerId > 0n && !(v.deathState & DeadEnum.Dead);
+  });
+  if (!frags.length) return;
+  const [kx, ky, kz] = m.killerPos;
+  const k: rp.FragInfo = {
+    killingType: 0, killsCount: frags.length, killerIdx: ks.id, weapon: m.weaponId, x: kx, y: ky, z: kz, flag: 0, unk: 0, score: 0,
+    frags: frags.map((d) => ({
+      victim: d.slot, weaponClass: d.weaponClass, hitspotInfo: ((d.deathType & 15) << 4) | (d.slot & 15), killFlag: 0, unk: 0,
+      x: d.pos[0], y: d.pos[1], z: d.pos[2], assist: d.assistSlot < 18 ? d.assistSlot : ks.id, unks: new Uint8Array(4),
+    })),
+  };
+  applyKill(r, ks, k, r.isBotMode(), frags.some((d) => d.slot === ks.id));
 }

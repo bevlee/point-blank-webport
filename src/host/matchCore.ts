@@ -53,7 +53,7 @@ export const CharaDeath = {
 } as const;
 const HitType = { Normal: 0, HeadshotCritical: 1, HeadshotProtection: 2, HelmetProtection: 3 } as const;
 const ObjectType = { Nothing: 0, User: 1, UserObject: 2, Object: 3 } as const;
-const RoomCondition = { DeathMatch: 4, Bomb: 8, Destroy: 12, Defense: 20, Boss: 28 } as const;
+const RoomCondition = { DeathMatch: 4, Bomb: 8, Destroy: 12, Defense: 20, FreeForAll: 24, Boss: 28 } as const;
 const MapRules = { HeadHunter: 32, Chaos: 80 } as const;
 const ClassDino = 19;
 const Team = { FR: 0, CT: 1, DRAW: 2 } as const;
@@ -110,6 +110,9 @@ const PART_RATE_MAX = 1.2;
 /** bullet damage coupon 1600078, +10 % (src/game/loadout.ts BATTLE_COUPONS, [INFERIDO] there) */
 const DAMAGE_UP_MAX = 0.1;
 const HEADSHOT_MULTIPLIER = 1.5;
+/** [RECRIADO] the web balance the shooter's client applies (src/game/damage.ts ZoneMultiplier; src/host/test checks they match):
+ * the caps of a server-applied (ObjectType.User) hit, per web part 1 torso / 2 limb */
+export const ZONE_MULTIPLIER = { head: HEADSHOT_MULTIPLIER, torso: 1, limb: 0.8 } as const;
 /** best three titles' Fire_Speed (DesignationValue.pef: -0.004, -0.003, -0.003 s) and GetFireDelay's floor (0x616020) */
 const FIRE_SPEED_TITLE_MAX = 0.01;
 const FIRE_DELAY_MIN = 0.06;
@@ -214,6 +217,8 @@ export function idStatics(id: number, type: number): number {
 }
 const hitType = (i: number) => i & 3;
 const hitPart = (i: number) => (i >>> 11) & 63;
+/** [RECRIADO] the web client's HitData part: 1 / 2 / 14 plus its helmet-pop bit 0x20 (src/net/battle.ts PART_HELMET_BIT) */
+const webHitPart = (i: number) => hitPart(i) & 0x1f;
 const hitDamageBot = (i: number) => i >>> 20;
 const hitDamageNormal = (i: number) => i >>> 21;
 const hitHelmet = (i: number) => (i >>> 17) & 7;
@@ -1108,14 +1113,16 @@ export class MatchCore {
           if (hit.hitEnum === HitType.HelmetProtection || hit.hitEnum === HitType.HeadshotProtection) continue;
           let damage = hitDamageNormal(hit.hitIndex);
           const objectId = hit.objectId;
-          const part = hitPart(hit.hitIndex);
+          const part = webHitPart(hit.hitIndex);
           let deathType: number = CharaDeath.DEFAULT;
           weaponId = hit.weaponId;
           const ht = hitType(hit.hitIndex);
           switch (ht) {
             case ObjectType.User: {
               const victim = room.getPlayer(objectId);
-              if (victim && player.respawnIsValid() && !player.dead && !victim.dead && !victim.immortal) {
+              // [RECRIADO] no team damage outside Free For All (the server-hosted web match trusts no client for it)
+              const sameTeam = !!victim && victim !== player && room.roomType !== RoomCondition.FreeForAll && swappedTeam(victim, room) === swappedTeam(player, room);
+              if (victim && !sameTeam && player.respawnIsValid() && !player.dead && !victim.dead && !victim.immortal) {
                 if (part === CharaHitPart.HEAD) deathType = CharaDeath.HEADSHOT;
                 if (room.roomType === RoomCondition.DeathMatch && room.rule === MapRules.HeadHunter && deathType !== CharaDeath.HEADSHOT) damage = 1;
                 else if (room.roomType !== RoomCondition.Boss || deathType !== CharaDeath.HEADSHOT) {
@@ -1292,7 +1299,9 @@ export class MatchCore {
     if (this.cfg.antiScript) {
       if (!st) return this.reject(room, pk, "stats", `The Item Statistic was not found. Please add: ${hit.weaponId} to config!`, true);
       const blast = propBreak ? this.data.propBlast?.[room.mapId] ?? 0 : 0;
-      if (this.validateHitData(raw, hit, st, w, blast) === null) {
+      // DeathMatch Chaos: every player hit is 200 (the User path below replaces the damage), so its raw value is not capped
+      const chaos = room.roomType === RoomCondition.DeathMatch && room.rule === MapRules.Chaos && hitType(hit.hitIndex) === ObjectType.User;
+      if (!chaos && this.validateHitData(raw, hit, st, w, blast) === null) {
         return this.reject(room, pk, "damage", `hit ${raw} part ${hitPart(hit.hitIndex)} with ${hit.weaponId} on ${hit.objectId}`, true);
       }
     }
@@ -1318,7 +1327,13 @@ export class MatchCore {
     const num1 = dist(vec(hit.startBullet), vec(hit.endBullet));
     if (cls === 3 || num1 <= st.range) {
       if (cls === 3 && num1 > st.range) return null;
-      if (hitPart(hit.hitIndex) !== CharaHitPart.HEAD || hitType(hit.hitIndex) === ObjectType.Object) {
+      if (hitType(hit.hitIndex) === ObjectType.User) {
+        // server-applied: the damage already carries the zone rate (head 1.5 / torso 1 / limb 0.8) and at most the +10 % coupon;
+        // +1 for the client's rounding (pbCalcDamage: trunc(x + 0.5))
+        const part = webHitPart(hit.hitIndex);
+        const rate = part === CharaHitPart.HEAD ? ZONE_MULTIPLIER.head : part === 2 ? ZONE_MULTIPLIER.limb : ZONE_MULTIPLIER.torso;
+        if (raw > Math.trunc((st.damageMax ?? st.damage) * rate * (1 + DAMAGE_UP_MAX) + 0.5) + 1) return null;
+      } else if (webHitPart(hit.hitIndex) !== CharaHitPart.HEAD || hitType(hit.hitIndex) === ObjectType.Object) {
         const num2 = cls === 3 ? st.damage : st.damage + Math.trunc((st.damage * 30) / 100);
         const honest = Math.trunc((st.damageMax ?? st.damage) * PART_RATE_MAX * (1 + DAMAGE_UP_MAX) + 0.5);
         if (raw > Math.max(num2, honest, blast)) return null;

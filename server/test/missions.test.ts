@@ -14,6 +14,8 @@ import { handleDeath } from "../src/game/roomHandlers.ts";
 import type { GameClient } from "../src/game/gameServer.ts";
 import type { FragInfo } from "../src/game/roomPackets.ts";
 import { battleRoom, opOf, type Sent } from "./fakeRoom.ts";
+// these cover the P2P trust path (client DEATH_REQ / leader 5166); the server-hosted match is src/p2p/test/serverMatch.test.ts
+process.env.PB_MATCH_MODE = "p2p";
 
 const SET = 99, MAP = 7, WEAPON = 105007; // item class 1, weapon class 5, number 7
 

@@ -13,6 +13,8 @@ export interface MatchSession extends RoomKey {
   accountId: number;
   /** the /signal ticket of this battle and slot (MatchEndpoint.signalTicket); /signal refuses a socket without it */
   signalTicket?: string;
+  /** "server": the match runs on the server (/match, src/net/serverMatch.ts) and owns HP and kills; default the P2P host */
+  matchMode?: "server" | "p2p";
 }
 
 export class MatchLink {

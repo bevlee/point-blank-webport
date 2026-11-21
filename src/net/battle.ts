@@ -43,10 +43,11 @@
 // fired from an internal 60 Hz ticker, so game code can just set actor transforms.
 // Transport: the match is hosted in the room leader's tab; the datagrams are the
 // Server.Match ones.
-import type { DroppedSyncEvent, HitEvent, KillEvent, NetAdapter, PlayerState, RadioEvent, ThrowEvent, Vec3, WeaponDropEvent } from "../game/netAdapter";
+import type { DroppedSyncEvent, HitEvent, KillEvent, NetAdapter, PlayerState, RadioEvent, ServerHpEvent, ThrowEvent, Vec3, WeaponDropEvent } from "../game/netAdapter";
 import { PB_DROP, dropFlags, parseDropFlags } from "../gameplay/pbDrop.ts";
 import type { HitZone, Team } from "../game/types";
 import { MatchLink, type MatchSession } from "./matchUdpLink.ts";
+import { ServerMatchTransport } from "./serverMatch.ts";
 import { Ev, GrenadeState, type ActionIn, type ActionOut, type WeaponDropInfo } from "./matchUdp.ts";
 import type { RoomClient } from "./roomClient.ts";
 import type { P2PHandle, P2POptions } from "../p2p/session.ts";
@@ -160,12 +161,16 @@ const MARK_NO_KILLER = 0x7f;
 const BOT_RECORDS_PER_DATAGRAM = 6;
 /** an AI slot silent this long is gone (the host died and nobody adopted the bots yet / they were released) */
 const BOT_SILENT_MS = 8000;
+/** ObjectType.User: the match core applies the damage (server-hosted match) */
+const OBJECT_USER = 1;
 const OBJECT_USER_OBJECT = 2;
 const OBJECT_OBJECT = 3;
 /** a prop break rides a HitData of ObjectType.Object whose objectId is PROP_ID_BASE + mapProps index: far above the
  *  MapStructure.xml object ids (< 200), so matchCore's room.getObject() finds nothing and leaves it alone (relayed as is) */
 const PROP_ID_BASE = 0x8000;
 const PART_HEAD = 14;
+/** CharaDeath.HEADSHOT (matchCore.ts) */
+const CHARA_DEATH_HEADSHOT = 3;
 const ZONE_PART: Record<HitZone, number> = { head: PART_HEAD, torso: 1, limb: 2 };
 const PART_ZONE_MASK = 0x1f;
 /** HitData.part only ever carries 1/2/14 (web zones) here, so this unused bit rides along for HELMET PROTECTION:
@@ -202,16 +207,21 @@ function packState(s: PlayerState, mark: number, bot: boolean): ActionOut {
   };
 }
 
-/** HitEvents -> HitData records (the hit's own weapon, else the one in hand) */
-function toHitInfos(hits: HitEvent[], inHand: number) {
-  return hits.map((h) => ({
-    start: h.point, end: h.point,
-    victimSlot: idSlot(h.victimId),
-    damage: Math.max(1, Math.min(2047, Math.round(h.baseDamage * (h.falloff || 1)))),
-    part: encodeHitPart(h.zone, !!h.helmetBlocked),
-    objectType: OBJECT_USER_OBJECT,
-    weaponId: hitWeaponId(h.weapon, inHand),
-  })).filter((h) => h.victimSlot >= 0);
+/** HitEvents -> HitData records (the hit's own weapon, else the one in hand). `serverApplies(victimSlot)`: the server-hosted
+ *  match applies this hit (ObjectType.User, the attacker's computed damage); otherwise it is relayed for the victim to apply. */
+function toHitInfos(hits: HitEvent[], inHand: number, serverApplies: (victimSlot: number) => boolean = () => false) {
+  return hits.map((h) => {
+    const victimSlot = idSlot(h.victimId);
+    const server = victimSlot >= 0 && h.dealt !== undefined && serverApplies(victimSlot);
+    return {
+      start: h.point, end: h.point,
+      victimSlot,
+      damage: server ? Math.max(0, Math.min(2047, Math.round(h.dealt!))) : Math.max(1, Math.min(2047, Math.round(h.baseDamage * (h.falloff || 1)))),
+      part: encodeHitPart(h.zone, !!h.helmetBlocked),
+      objectType: server ? OBJECT_USER : OBJECT_USER_OBJECT,
+      weaponId: hitWeaponId(h.weapon, inHand),
+    };
+  }).filter((h) => h.victimSlot >= 0);
 }
 
 interface Snapshot { at: number; s: PlayerState }
@@ -281,6 +291,7 @@ export class PbBattleNet implements NetAdapter {
   p2p: P2PHandle | null = null;
   /** room leader slot the P2P link was opened to (the host); a link that dies while it is still the leader is a stall */
   private hostSlot = -1;
+  private readonly serverHpCbs = new Set<(e: ServerHpEvent) => void>();
   private failingOver = false;
   private disposed = false;
   private readonly lifetime = new AbortController();
@@ -354,6 +365,18 @@ export class PbBattleNet implements NetAdapter {
 
   /** Registers on Server.Match (opcode 65 -> 66) and starts the interpolation ticker. */
   async connect(): Promise<void> {
+    if (this.serverMatch) {
+      const t = await ServerMatchTransport.connect(this.link.serverUrl, this.link.session, { signal: this.lifetime.signal });
+      if (this.disposed) { t.close(); throw new Error("match start cancelled"); }
+      this.link.transport = () => t;
+      this.hostSlot = this.room?.leaderSlot ?? -1;
+      const prevClose = this.link.onClose;
+      this.link.onClose = (why) => { prevClose?.(why); this.onLinkClosed(why); };
+      await this.link.open();
+      this.wasBotHost = this.isBotHost;
+      this.ticker = setInterval(() => this.tick(), 1000 / 60);
+      return;
+    }
     const { openP2P } = await import("../p2p/session.ts"); // its own chunk, loaded when a battle starts
     this.p2p = await openP2P({
       session: this.link.session, serverUrl: this.link.serverUrl, room: this.room,
@@ -376,8 +399,15 @@ export class PbBattleNet implements NetAdapter {
 
   /** The match host runs the room's AI (the leader's tab, or whoever took over); guests only render it. */
   get isBotHost(): boolean {
+    // server-hosted match: the room leader's client still runs the AI seats (its link may carry their records)
+    if (this.serverMatch) return !!this.room && this.room.leaderSlot === this.link.session.slot;
     return !!this.p2p?.host;
   }
+
+  /** the match runs on the server (/match): it owns players' HP and kills */
+  get serverMatch(): boolean { return this.link.session.matchMode === "server"; }
+  get serverAuthoritative(): boolean { return this.serverMatch; }
+  onServerHp(cb: (e: ServerHpEvent) => void): () => void { this.serverHpCbs.add(cb); return () => this.serverHpCbs.delete(cb); }
 
   onBotHost(cb: (host: boolean) => void): () => void { this.botHostCbs.add(cb); return () => this.botHostCbs.delete(cb); }
 
@@ -507,7 +537,33 @@ export class PbBattleNet implements NetAdapter {
    * core: current hp / dead flags (everyone comes back at full life until the next respawn). */
   private onLinkClosed(why: string): void {
     if (this.disposed || this.failingOver || !this.room || why.startsWith("1001")) return; // 1001 = match over
+    if (this.serverMatch) { this.startReconnect(why); return; }
     this.startFailover(why, false);
+  }
+
+  /** Server-hosted match: the server is the host, so a dropped link is only ours. Link again with the same ticket; the server
+   *  re-arms the slot from its last RESPAWN (serverMatch.ts attach). 4003 (kicked) / 4004 (left the battle) end it for good. */
+  private startReconnect(why: string): void {
+    if (/^400[345] /.test(why)) { console.warn(`[match] link closed for good: ${why}`); return; }
+    this.failingOver = true;
+    console.warn(`[match] link to the server lost (${why}); reconnecting`);
+    const deadline = Date.now() + 60000;
+    const attempt = async (): Promise<void> => {
+      while (!this.disposed && Date.now() < deadline) {
+        try {
+          const t = await ServerMatchTransport.connect(this.link.serverUrl, this.link.session, { signal: this.lifetime.signal });
+          if (this.disposed) { t.close(); return; }
+          await this.link.reopen(() => t);
+          console.warn("[match] back on the server match");
+          return;
+        } catch (e) {
+          console.warn("[match] reconnect attempt failed:", (e as Error).message);
+          if (/\(400[345] /.test((e as Error).message)) return;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    };
+    attempt().finally(() => { this.failingOver = false; });
   }
 
   /** The room's leader changed while the link to the host is still up (a vote,: SLOTINFO 3595
@@ -518,6 +574,8 @@ export class PbBattleNet implements NetAdapter {
     if (!room || this.disposed || this.failingOver || this.hostSlot < 0) return;
     const now = room.leaderSlot;
     if (now < 0 || now >= 18 || now === this.hostSlot) return;
+    // server-hosted match: nothing moves but the AI seats, which follow the new leader
+    if (this.serverMatch) { this.hostSlot = now; this.notifyBotHost(); return; }
     this.startFailover(`room leader moved from slot ${this.hostSlot} to ${now}`, true);
   }
 
@@ -650,7 +708,8 @@ export class PbBattleNet implements NetAdapter {
       for (const d of a.dropped) this.pendingDropped.delete(d.idx);
     }
     if (this.pendingHits.length) {
-      a.hits = toHitInfos(this.pendingHits.splice(0), this.lastWeaponId);
+      // server-hosted match: our hits on players are applied by the server; an AI seat is still its host client's to apply
+      a.hits = toHitInfos(this.pendingHits.splice(0), this.lastWeaponId, (v) => this.serverMatch && !this.botSlots.has(v) && !this.ownBots.has(v));
       // the kill is reported when the victim's death mark arrives, maybe after a weapon swap: keep the weapon of the hit
       for (const h of a.hits) {
         this.lastHitWeapon.set(h.victimSlot, h.weaponId);
@@ -802,6 +861,7 @@ export class PbBattleNet implements NetAdapter {
     this.p2p = null;
     this.stateCbs.clear();
     this.hitCbs.clear();
+    this.serverHpCbs.clear();
     this.propBreakCbs.clear();
     this.killCbs.clear();
     this.leaveCbs.clear();
@@ -831,6 +891,12 @@ export class PbBattleNet implements NetAdapter {
         // fallback: the player's WeaponSync carries what is really in hand (picked-up weapons, skins)
         if (a.flags === Ev.WeaponSync) this.serverWeapon.set(a.slot, a.weaponId);
         else this.clientWeapon.set(a.slot, a.weaponId);
+      }
+      // the server-hosted match's HP sync of our own slot (EVENTS_ACTION type 2): the authoritative HP, and the death at 0
+      if (a.slot === me && this.serverMatch && a.hp !== undefined && (a.flags === Ev.HpSync || a.flags === (Ev.HpSync | Ev.GetWeaponForHost))) {
+        const k = a.death?.killerSlot;
+        const ev: ServerHpEvent = { hp: a.hp, ...(a.death ? { death: { killerId: k === undefined || k >= 18 ? null : slotId(k), headshot: a.death.deathType === CHARA_DEATH_HEADSHOT } } : {}) };
+        for (const cb of this.serverHpCbs) cb(ev);
       }
       if (a.slot === me && !a.death && !a.hits) continue;
       if (a.death) {
@@ -974,6 +1040,7 @@ export class PbBattleNet implements NetAdapter {
 
   /** DEATH_REQ once per victim life: from the victim's kill mark, or (P2P host) from the match core's own damage. */
   private reportKillOnce(victimSlot: number, weaponId: number, headshot: boolean, killerPos: [number, number, number], victimPos: [number, number, number]): void {
+    if (this.serverMatch) return; // the server's core declared the kill already (no client DEATH_REQ)
     if (this.reportedVictims.has(victimSlot)) return;
     this.reportedVictims.add(victimSlot);
     this.room?.reportKill(victimSlot, weaponId, headshot, killerPos, victimPos);

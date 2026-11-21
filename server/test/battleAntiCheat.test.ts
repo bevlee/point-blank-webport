@@ -12,6 +12,8 @@ import { RoomModel, RoomState, SlotState, DeadEnum } from "../src/game/roomModel
 import { battleGuard, handleDeath, handleDevBomb, handleRespawn, handleTimerSync } from "../src/game/roomHandlers.ts";
 import type { ChannelModel } from "../src/game/channel.ts";
 import type { GameClient } from "../src/game/gameServer.ts";
+// these cover the P2P trust path (client DEATH_REQ / leader 5166); the server-hosted match is src/p2p/test/serverMatch.test.ts
+process.env.PB_MATCH_MODE = "p2p";
 
 const WEAPON = 105007, TDM = 4, BOMB = 8;
 const opOf = (b: Uint8Array) => b[0] | (b[1] << 8);

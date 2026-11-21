@@ -1,6 +1,7 @@
 // The one HTTP/WebSocket front of the TS servers (port 8090):
 //   ws://HOST:PORT/tcp?target=auth|game1|game2|game3  -> 1 WebSocket = 1 PB session, straight into Auth/Game (no TCP hop)
-//   ws://HOST:PORT/signal?room=&role=&slot=           -> WebRTC signaling of the leader-hosted match (signal.ts)
+//   ws://HOST:PORT/signal?room=&role=&slot=           -> WebRTC signaling of the leader-hosted match (signal.ts, PB_MATCH_MODE=p2p)
+//   ws://HOST:PORT/match?room=&slot=                  -> the server-hosted match (../match/serverMatch.ts)
 //   GET  /health                                      -> JSON with live session counts
 //   POST /api/register, POST /api/login               -> account HTTP API (bcrypt + Postgres, ./accounts)
 import http from "node:http";
@@ -10,6 +11,7 @@ import { WebSocketServer } from "ws";
 import { config } from "../config.ts";
 import { pool } from "../db.ts";
 import { handleSignal, signalStats } from "./signal.ts";
+import { handleMatch, matchStats } from "../match/serverMatch.ts";
 import { credentialsSchema } from "./accounts/validation.ts";
 import { registerAccount, loginAccount, AccountApiError } from "./accounts/accounts.ts";
 import { isRateLimited } from "./accounts/rateLimit.ts";
@@ -127,7 +129,7 @@ export async function startWebServer(acceptors: Acceptors, host = config.webHost
     if (!url) { res.writeHead(400); res.end("invalid request target"); return; }
     if (url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
-      res.end(JSON.stringify({ ok: true, targets: Object.keys(acceptors), live, signal: signalStats() }));
+      res.end(JSON.stringify({ ok: true, targets: Object.keys(acceptors), live, signal: signalStats(), match: matchStats() }));
       return;
     }
     if (url.pathname === "/ready") {
@@ -158,7 +160,7 @@ export async function startWebServer(acceptors: Acceptors, host = config.webHost
     if (!url) { refuse("400 Bad Request"); return; }
     const target = url.searchParams.get("target") ?? "";
     const ip = clientIp(req);
-    const known = url.pathname === "/signal" || (url.pathname === "/tcp" && acceptors[target]);
+    const known = url.pathname === "/signal" || url.pathname === "/match" || (url.pathname === "/tcp" && acceptors[target]);
     if (!known) { refuse(); return; }
     // Browser origins must be allowed; tools without Origin still require protocol authentication.
     const origin = req.headers.origin;
@@ -167,6 +169,8 @@ export async function startWebServer(acceptors: Acceptors, host = config.webHost
     socket.once("close", () => ipCap.release(ip));
     if (url.pathname === "/signal") {
       wss.handleUpgrade(req, socket, head, (ws) => handleSignal(ws, url, log));
+    } else if (url.pathname === "/match") {
+      wss.handleUpgrade(req, socket, head, (ws) => handleMatch(ws, url, log));
     } else if (url.pathname === "/tcp" && acceptors[target]) {
       const accept = acceptors[target];
       wss.handleUpgrade(req, socket, head, (ws) => {
